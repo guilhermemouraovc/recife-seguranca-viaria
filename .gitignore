@@ -1,0 +1,10 @@
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/adhoc/*
+!data/adhoc/.gitkeep
+__pycache__/
+*.pyc
+.env
+.venv/
