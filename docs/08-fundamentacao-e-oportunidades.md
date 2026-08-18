@@ -32,6 +32,14 @@ olhando o microdado — reforça o argumento de ir além da citação de número
 - Brasil: motociclistas são 41,6% das mortes no trânsito; mortes em sinistros de moto
   passaram de 11.182 (2019) para 15.459 (2024), alta de 38% ([Portal do Trânsito — Atlas da
   Violência 2026](https://www.portaldotransito.com.br/noticias/fiscalizacao-e-legislacao/estatisticas/atlas-da-violencia-2026-motociclistas-ja-representam-416-das-mortes-no-transito-no-brasil/)).
+- Brasil, série longa (fonte primária Datasus, via [Ipea — Nota Técnica Dirur nº 57,
+  2025](https://repositorio.ipea.gov.br/entities/publication/2da4761a-bffa-40d2-9291-9347ef7b07fa)):
+  as mortes de motociclistas saíram de **3,4% do total de mortes no trânsito em 1998 para 39%
+  em 2023** (1.047 → 13.521 mortes/ano). É um número próximo, mas não idêntico, ao 41,6% acima
+  (fonte e ano diferentes — não fundir os dois numa "confirmação cruzada"). Importante não
+  confundir com a **frota relativa** de motos, que no mesmo relatório (fonte Senatran) cresceu
+  de ~11,3% para ~28% da frota veicular total no mesmo período — são duas curvas distintas: a
+  frota cresce, mas a participação nas mortes cresce desproporcionalmente mais rápido.
 - Perfil de vítima em Recife: 84% homens, 60% entre 20–40 anos — faixa etária economicamente
   ativa, o que sustenta um argumento socioeconômico além do de saúde pública ([CBN
   Recife](https://www.cbnrecife.com/2026/05/04/a-cada-dois-mortos-no-transito-do-recife-em-2025-um-era-motociclista-aponta-cttu/)).
@@ -57,6 +65,16 @@ Defesa Social para produzir o Relatório Anual de Segurança Viária — ou seja
 reconcilia manualmente bases que, nos dados abertos, não compartilham chave de junção ([CBN
 Recife sobre o relatório
 anual](https://www.cbnrecife.com/artigo/relatorio-anual-de-seguranca-viaria-realizado-pela-cttu-aponta-reducao-nas-mortes-de-transito-no-recife)).
+
+> **Não confirmado (checagem de 08/2026):** o conteúdo efetivamente recuperado dessa URL é uma
+> matéria de 08/03/2022 sobre o relatório de 2017–2020 (Sepul + CTTU + Bloomberg Initiative for
+> Global Road Safety), e **não menciona "Compat" nem SAMU/Defesa Social** em nenhum trecho. A
+> tentativa de confirmar o nome do comitê na página oficial do PSVR
+> (`cttu.recife.pe.gov.br/programa-de-seguranca-viaria`) também falhou (página inacessível). Ou
+> seja, a afirmação acima sobre o Compat **não está sustentada pela fonte citada** e não foi
+> possível confirmá-la por outra via. Mantida aqui como hipótese a verificar, não como fato —
+> ver `06-limitacoes-metodologicas.md`, item 10.
+
 O PSVR também tem um eixo formal de "Gestão de Dados", que alimenta continuamente os eixos de
 fiscalização, engenharia viária e educação/comunicação ([CTTU — Gestão de dados do
 Recife](https://cttu.recife.pe.gov.br/gestao-de-dados-do-recife)).
@@ -104,5 +122,6 @@ variável-alvo viável sem precisar de trilha customizada.
 - [Prefeitura de Campinas — cobertura do estudo Johns Hopkins sobre velocidade de motociclistas](https://campinas.sp.gov.br/noticias/114843/quase-metade-dos-motociclistas-excedem-velocidade-aponta-estudo-da-johns-hopkins)
 - [CBN Recife — Relatório Anual de Segurança Viária e o papel do Compat](https://www.cbnrecife.com/artigo/relatorio-anual-de-seguranca-viaria-realizado-pela-cttu-aponta-reducao-nas-mortes-de-transito-no-recife)
 - [CTTU — Gestão de dados do Recife](https://cttu.recife.pe.gov.br/gestao-de-dados-do-recife)
+- [Ipea — Nota Técnica Dirur nº 57 (2025): Mortalidade e morbidade por sinistros de motocicleta](https://repositorio.ipea.gov.br/entities/publication/2da4761a-bffa-40d2-9291-9347ef7b07fa)
 - [the-atlas.com — Achieving Vision Zero, Reducing Traffic Fatalities (San Diego/SANDAG)](https://the-atlas.com/projects/achieving-vision-zero--reducing-traffic-fatalities-using-smart-data-and-analytics-4)
 - [Microsoft New York blog — Vision Zero Labs: Using Data Science to Improve Traffic Safety](https://blogs.microsoft.com/newyork/2017/06/29/vision-zero-labs-using-data-science-to-improve-traffic-safety/)

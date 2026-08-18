@@ -71,3 +71,32 @@ tratar como "dado ausente" de forma genérica, verificar se essas colunas são p
 outros anos — pode indicar que o formulário de coleta mudou ao longo do tempo, o que é em
 si um achado relevante para o relatório (limitação da série histórica), não só um problema
 técnico a contornar.
+
+## 10. Fact-checking de fontes secundárias (maio/2026) — divergências não resolvidas
+
+Ao checar as fontes citadas em `08-fundamentacao-e-oportunidades.md`, item 2 e 3, algumas
+não puderam ser confirmadas e outras revelaram números conflitantes. Registrado aqui em vez
+de "resolvido" silenciosamente:
+
+- **CBN Recife e CNF PE não são fontes independentes.** Os dois artigos de 04/05/2026 sobre
+  os 140 mortos no trânsito do Recife em 2025 (moto ~56% do total) trazem a mesma citação
+  literal da presidente da CTTU e os mesmos números — são a mesma nota oficial da CTTU
+  republicada, não duas apurações distintas. Não tratar a coincidência entre as duas como
+  corroboração.
+- **Fonte primária da nota da CTTU inacessível.** A página da Prefeitura do Recife
+  (`www2.recife.pe.gov.br/noticias/01/05/2026/...`) que presumivelmente originou a nota
+  retornou erro ao acessar. Não foi possível confirmar nem descartar a hipótese de que o
+  ~56% é um corte preliminar do Maio Amarelo, anterior ao fechamento oficial do PSVR
+  (junho/2026). Tratar como pergunta em aberto, não como fato assumido.
+- **Página oficial do PSVR inacessível.** `cttu.recife.pe.gov.br/programa-de-seguranca-viaria`
+  também retornou erro. Não foi possível confirmar se o órgão citado ali usa o nome "Comitê
+  Técnico de Segurança Viária" — ver ressalva correspondente em
+  `08-fundamentacao-e-oportunidades.md`, item 4, sobre o nome do comitê (Compat).
+- **Divergência no percentual de motociclistas acima do limite de velocidade.** As matérias
+  de maio/2026 (CBN Recife, CNF PE) citam "1 em cada 3 motociclistas" (~33%) acima do limite,
+  atribuído a um estudo da Johns Hopkins University. Já a Folha PE (citada em
+  `08-fundamentacao-e-oportunidades.md`, item 3) cita 43% das motos acima do limite, atribuído
+  ao mesmo programa de monitoramento CTTU+BIGRS+JHU+UFC. Podem ser cortes temporais diferentes
+  do mesmo monitoramento contínuo, mas nenhuma das duas fontes cita a data exata da coleta —
+  não há prova para escolher uma como a atual. Manter as duas, lado a lado, em qualquer
+  citação futura desse dado.
