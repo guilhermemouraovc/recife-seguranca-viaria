@@ -1,0 +1,5 @@
+# Managed by Brief-Spec.
+interface:
+  display_name: "Outcome Brief"
+  short_description: "Close work with a consistent evidence-backed brief"
+  default_prompt: "Use $outcome-brief to close this task with a concise evidence-backed outcome."

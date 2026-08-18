@@ -1,0 +1,5 @@
+# Managed by Brief-Spec.
+interface:
+  display_name: "Brief-Spec"
+  short_description: "Route substantive work to the right explanation contract"
+  default_prompt: "Use $brief-spec to classify this task and explain it with the matching evidence-backed profile."

@@ -1,0 +1,69 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/brief-spec/brief-spec.pyz\" hook --provider codex --event PostToolUse",
+            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -Command \"& { $briefspecRoot = git rev-parse --show-toplevel; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & python (Join-Path $briefspecRoot '.codex/brief-spec/brief-spec.pyz') hook --provider codex --event PostToolUse }\"",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/brief-spec/brief-spec.pyz\" hook --provider codex --event PreCompact",
+            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -Command \"& { $briefspecRoot = git rev-parse --show-toplevel; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & python (Join-Path $briefspecRoot '.codex/brief-spec/brief-spec.pyz') hook --provider codex --event PreCompact }\"",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/brief-spec/brief-spec.pyz\" hook --provider codex --event SessionStart",
+            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -Command \"& { $briefspecRoot = git rev-parse --show-toplevel; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & python (Join-Path $briefspecRoot '.codex/brief-spec/brief-spec.pyz') hook --provider codex --event SessionStart }\"",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/brief-spec/brief-spec.pyz\" hook --provider codex --event Stop",
+            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -Command \"& { $briefspecRoot = git rev-parse --show-toplevel; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & python (Join-Path $briefspecRoot '.codex/brief-spec/brief-spec.pyz') hook --provider codex --event Stop }\"",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/brief-spec/brief-spec.pyz\" hook --provider codex --event UserPromptSubmit",
+            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -Command \"& { $briefspecRoot = git rev-parse --show-toplevel; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & python (Join-Path $briefspecRoot '.codex/brief-spec/brief-spec.pyz') hook --provider codex --event UserPromptSubmit }\"",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ]
+  }
+}

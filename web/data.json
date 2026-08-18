@@ -1,0 +1,127 @@
+{
+  "generated_at": "2026-08-14T03:13:41.446890+00:00",
+  "sinistros_por_ano": [
+    {
+      "ano": 2015,
+      "sinistros": 7273,
+      "vitimas": 1624.0,
+      "vitimas_fatais": null,
+      "natureza": {
+        "SEM VÍTIMA": 5853,
+        "COM VÍTIMA": 1396,
+        "VÍTIMA FATAL": 24
+      }
+    },
+    {
+      "ano": 2016,
+      "sinistros": 11263,
+      "vitimas": 2552.0,
+      "vitimas_fatais": 39.0,
+      "natureza": {
+        "SEM VÍTIMA": 8931,
+        "COM VÍTIMA": 2146,
+        "VÍTIMA FATAL": 39
+      }
+    },
+    {
+      "ano": 2017,
+      "sinistros": 11758,
+      "vitimas": 2626.0,
+      "vitimas_fatais": 38.0,
+      "natureza": {
+        "SEM VÍTIMA": 9400,
+        "COM VÍTIMA": 2157,
+        "VÍTIMA FATAL": 35
+      }
+    },
+    {
+      "ano": 2018,
+      "sinistros": 11411,
+      "vitimas": 2397.0,
+      "vitimas_fatais": 28.0,
+      "natureza": {
+        "SEM VÍTIMA": 9249,
+        "COM VÍTIMA": 2032,
+        "VÍTIMA FATAL": 27
+      }
+    },
+    {
+      "ano": 2019,
+      "sinistros": 12062,
+      "vitimas": 2593.0,
+      "vitimas_fatais": 25.0,
+      "natureza": {
+        "SEM VÍTIMA": 9796,
+        "COM VÍTIMA": 2235,
+        "VÍTIMA FATAL": 25,
+        "ENTRADA E SAÍDA": 1,
+        "APOIO": 1
+      }
+    },
+    {
+      "ano": 2020,
+      "sinistros": 4092,
+      "vitimas": 2089.0,
+      "vitimas_fatais": 20.0,
+      "natureza": {
+        "SEM VÍTIMA": 2317,
+        "COM VÍTIMA": 1754,
+        "VÍTIMA FATAL": 20
+      }
+    },
+    {
+      "ano": 2021,
+      "sinistros": 2380,
+      "vitimas": 2123.0,
+      "vitimas_fatais": 25.0,
+      "natureza": {
+        "COM VÍTIMA": 1809,
+        "SEM VÍTIMA": 540,
+        "VÍTIMA FATAL": 25,
+        "OUTROS": 6
+      }
+    },
+    {
+      "ano": 2022,
+      "sinistros": 2669,
+      "vitimas": 2460.0,
+      "vitimas_fatais": 25.0,
+      "natureza": {
+        "COM VÍTIMA": 2081,
+        "SEM VÍTIMA": 566,
+        "VÍTIMA FATAL": 22
+      }
+    },
+    {
+      "ano": 2023,
+      "sinistros": 4032,
+      "vitimas": 3878.0,
+      "vitimas_fatais": 31.0,
+      "natureza": {
+        "COM VÍTIMA": 3401,
+        "SEM VÍTIMA": 601,
+        "VÍTIMA FATAL": 30
+      }
+    },
+    {
+      "ano": 2024,
+      "sinistros": 5315,
+      "vitimas": 5037.0,
+      "vitimas_fatais": 40.0,
+      "natureza": {
+        "COM VÍTIMA": 4671,
+        "SEM VÍTIMA": 610,
+        "VÍTIMA FATAL": 34
+      }
+    }
+  ],
+  "caveats": [
+    "2015 so tem dados a partir de junho -- qualquer total anual de 2015 esta subestimado.",
+    "Sao dados de 'chamados' da CTTU, podem divergir dos Relatorios Anuais oficiais (registros dos agentes de transito).",
+    "2025, quando presente, e classificado como preliminar pelo PSVR.",
+    "O CSV de 2015 nao tem coluna 'vitimasfatais' -- valor tratado como desconhecido (null), nao zero.",
+    "No CSV de 2015 as colunas 'tipo' e 'natureza' vem trocadas em relacao aos demais anos (confirmado por inspecao) -- corrigido no pipeline antes de agregar.",
+    "Nomes de coluna mudam entre anos (data/DATA, natureza/natureza_acidente) -- normalizado no pipeline, nao na fonte.",
+    "Fonte: Portal de Dados Abertos do Recife (CKAN), dataset acidentes-de-transito-com-e-sem-vitimas."
+  ]
+}

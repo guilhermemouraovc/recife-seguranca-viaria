@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Segurança Viária Recife — dados extraídos</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  h1 { font-size: 1.4rem; }
+  .meta { color: #666; font-size: 0.85rem; margin-bottom: 1.5rem; }
+  .chart-box { margin-bottom: 2.5rem; }
+  .caveats { background: #fff8e1; border: 1px solid #e6d17a; border-radius: 6px; padding: 1rem 1.2rem; font-size: 0.85rem; }
+  .caveats h2 { font-size: 0.95rem; margin-top: 0; }
+  .caveats ul { margin: 0; padding-left: 1.2rem; }
+  canvas { max-height: 380px; }
+</style>
+</head>
+<body>
+  <h1>Sinistros de trânsito — Recife (CTTU, chamados)</h1>
+  <p class="meta" id="meta">carregando...</p>
+
+  <div class="chart-box"><canvas id="chartSinistros"></canvas></div>
+  <div class="chart-box"><canvas id="chartVitimasFatais"></canvas></div>
+  <div class="chart-box"><canvas id="chartNatureza"></canvas></div>
+
+  <div class="caveats">
+    <h2>Ressalvas metodológicas</h2>
+    <ul id="caveatsList"></ul>
+  </div>
+
+<script>
+fetch("data.json")
+  .then(r => r.json())
+  .then(render)
+  .catch(err => {
+    document.getElementById("meta").textContent =
+      "Erro ao carregar data.json — sirva esta pasta com `python -m http.server` em vez de abrir o arquivo direto.";
+    console.error(err);
+  });
+
+function render(data) {
+  const anos = data.sinistros_por_ano;
+  document.getElementById("meta").textContent =
+    `Gerado em ${data.generated_at} · ${anos.length} anos · dataset acidentes-de-transito-com-e-sem-vitimas`;
+
+  document.getElementById("caveatsList").innerHTML =
+    data.caveats.map(c => `<li>${c}</li>`).join("");
+
+  new Chart(document.getElementById("chartSinistros"), {
+    type: "bar",
+    data: {
+      labels: anos.map(a => a.ano),
+      datasets: [
+        { label: "Sinistros (total)", data: anos.map(a => a.sinistros), backgroundColor: "#4472c4" },
+        { label: "Vítimas (contagem agregada)", data: anos.map(a => a.vitimas), backgroundColor: "#ed7d31" },
+      ],
+    },
+    options: { responsive: true, plugins: { title: { display: true, text: "Sinistros e vítimas por ano" } } },
+  });
+
+  new Chart(document.getElementById("chartVitimasFatais"), {
+    type: "line",
+    data: {
+      labels: anos.map(a => a.ano),
+      datasets: [{
+        label: "Vítimas fatais",
+        data: anos.map(a => a.vitimas_fatais),
+        borderColor: "#c00000",
+        backgroundColor: "#c00000",
+        spanGaps: true,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: { title: { display: true, text: "Vítimas fatais por ano (null = coluna ausente na fonte, não zero)" } },
+    },
+  });
+
+  const naturezaKeys = [...new Set(anos.flatMap(a => Object.keys(a.natureza)))]
+    .filter(k => ["COM VÍTIMA", "SEM VÍTIMA", "VÍTIMA FATAL"].includes(k));
+  const palette = { "COM VÍTIMA": "#ed7d31", "SEM VÍTIMA": "#a5a5a5", "VÍTIMA FATAL": "#c00000" };
+
+  new Chart(document.getElementById("chartNatureza"), {
+    type: "bar",
+    data: {
+      labels: anos.map(a => a.ano),
+      datasets: naturezaKeys.map(k => ({
+        label: k,
+        data: anos.map(a => a.natureza[k] || 0),
+        backgroundColor: palette[k],
+      })),
+    },
+    options: {
+      responsive: true,
+      scales: { x: { stacked: true }, y: { stacked: true } },
+      plugins: { title: { display: true, text: "Natureza do sinistro por ano (empilhado)" } },
+    },
+  });
+}
+</script>
+</body>
+</html>
