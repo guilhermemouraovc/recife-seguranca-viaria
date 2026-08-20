@@ -41,6 +41,14 @@ Leia estes documentos nesta ordem antes de escrever qualquer código:
 - Este projeto tem prazo acadêmico — prefira soluções simples e que funcionam
   (requests + pandas + parquet) a infraestrutura sofisticada.
 
+## Escopo separado: pesquisa qualitativa (semana 3–4)
+
+As regras acima valem só para o pipeline de extração de dados. A partir de agora o projeto
+também tem uma frente de **pesquisa qualitativa** (entrevistas com a Secretaria de
+Trânsito/CTTU), que roda num contrato próprio em `pesquisa-qualitativa/CLAUDE.md` — não
+misture as duas: dado aberto/CKAN segue as regras deste arquivo, fundamentação de pergunta de
+entrevista segue as regras de lá.
+
 ## O que ainda não foi decidido
 
 O escopo de "todos os ~30 datasets da CTTU + 16 do SAMU" vs. "só os essenciais" (sinistros,

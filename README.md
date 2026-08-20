@@ -26,6 +26,16 @@ pra usar — sem precisar redescobrir nada do zero a cada conversa.
 4. Se está usando outro agente/IDE sem suporte a skill, comece por `docs/01-visao-geral.md`
    e siga a ordem numerada da pasta `docs/`.
 
+## Pesquisa qualitativa (semana 3–4)
+
+O desk research foi aprovado; a etapa atual é entrevistar profissionais da Secretaria de
+Trânsito/CTTU (ver `docs/00-contexto-cesar.md`). Isso roda num harness separado, com contrato
+próprio (não confundir com as regras da extração de dados):
+
+- `pesquisa-qualitativa/CLAUDE.md` — o que vale como evidência ali (claim ledger contestável).
+- `pesquisa-qualitativa/README.md` — fluxo completo.
+- Comandos `/pesquisar`, `/consolidar`, `/contestar`, `/fundamentar` em `.claude/commands/`.
+
 ## Skills disponíveis
 
 - **`extract-pdf-adhoc`** — extração de PDF avulso, fora do fluxo dos PDFs institucionais.
@@ -81,6 +91,11 @@ Estão detalhadas em `CLAUDE.md`, mas as que mais pegam gente de surpresa:
 │   ├── extract_adhoc.py                    # extração ad-hoc (skill extract-pdf-adhoc)
 │   ├── manifest.py                         # provenance/idempotência dos downloads
 │   └── build_dashboard_data.py             # gera dados pro dashboard em web/
+├── pesquisa-qualitativa/                   # harness da pesquisa com a Secretaria de Trânsito
+│   ├── CLAUDE.md / AGENTS.md               # contrato e papéis (scout/synthesizer/adversary/architect)
+│   ├── research/                           # 00-questions.md, claims.md, sources/, findings/
+│   ├── evals/ledger.eval.md                # portão de qualidade antes de gerar artefato
+│   └── artifacts/                          # roteiro de entrevista + mapeamento de respondentes
 ├── data/
 │   ├── raw/       # (git-ignorado) downloads brutos
 │   ├── processed/ # (git-ignorado) dados tratados
