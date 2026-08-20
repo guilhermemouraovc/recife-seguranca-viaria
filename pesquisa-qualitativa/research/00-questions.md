@@ -20,8 +20,16 @@ ou se deve investigar o que substitui a previsão hoje (e por quê ela não exis
   de engenharia viária, ou fica só no relatório/pesquisa?
 - Q1.4 Quando surge uma demanda pontual (ex.: reclamação de comércio, morador, ou evento), qual
   é o processo de resposta — e ele é documentado ou informal/caso a caso?
+- Q1.5 *(aberta pelo synthesizer em 20/08/2026)* — **respondida em parte pelo adversary**, ver
+  `[C-09]`: existe controle adaptativo de semáforo (ajuste automático por câmera/tráfego em
+  tempo real) desde 07/2024 em 2 corredores. Isso NÃO é previsão de impacto de uma mudança
+  futura — é ajuste ao tráfego do momento. Pergunta que sobra pra entrevista: esse programa
+  segue ativo/foi expandido em 2026, e ele influencia (ou poderia influenciar) decisão de nova
+  sinalização em outros pontos?
 
-Status: `em pesquisa` (Q1.1 em levantamento)
+Status: `em pesquisa` — Q1.3 confirmado como uso retrospectivo (`[C-03]`), Q1.5 respondido
+parcialmente (`[C-09]`); Q1.1, Q1.2 e Q1.4 continuam sem resposta pública, precisam da
+entrevista (ver `research/findings/D1.md`)
 
 ## D2 — Estrutura de decisão e quem responde o quê
 
