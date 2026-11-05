@@ -6,34 +6,23 @@ caveats from docs/06-limitacoes-metodologicas.md as fields in the JSON so the
 frontend can render them next to the numbers, not hide them.
 """
 import json
-from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parent.parent
-SINISTROS_DIR = ROOT / "data" / "raw" / "cttu" / "acidentes-de-transito-com-e-sem-vitimas"
+import sinistros
+
+ROOT = sinistros.ROOT
 OUT_PATH = ROOT / "web" / "data.json"
 
 
 def build_sinistros_summary() -> dict:
     """Per-year totals from the consolidated sinistros dataset (2015-2024).
 
-    Column names drift across years (docs/06 #9: form changes over time) --
-    e.g. 'DATA' vs 'data', 'natureza' vs 'natureza_acidente', and 2015 has no
-    'vitimasfatais' column at all. Normalize names; treat a missing column as
-    unknown (None), never as zero.
+    Column normalization (incl. the 2015 tipo/natureza swap) lives in
+    sinistros.normalize_columns(). A missing column is unknown (None), never zero.
     """
     by_year = []
-    for csv_path in sorted(SINISTROS_DIR.glob("*.csv")):
-        df = pd.read_csv(csv_path, sep=";", decimal=",")
-        df.columns = df.columns.str.lower()
-        df = df.rename(columns={"natureza_acidente": "natureza"})
-        year = int(df["data"].str.slice(0, 4).mode()[0])
-        if year == 2015:
-            # Source anomaly, confirmed by inspection: in this file 'tipo' holds
-            # COM/SEM VITIMA/VITIMA FATAL and 'natureza' holds the accident type
-            # (COLISAO, ATROPELAMENTO...) -- the reverse of every other year.
-            df = df.rename(columns={"natureza": "_tipo_2015", "tipo": "natureza"})
+    for year, df in sinistros.read_all(decimal=","):
         has_fatais = "vitimasfatais" in df.columns
         by_year.append({
             "ano": year,

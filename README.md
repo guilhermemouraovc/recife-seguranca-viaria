@@ -49,6 +49,12 @@ quando ele está acima da velocidade segura num trecho de risco.
 - `data/contrato/trechos_exemplo.json`: 4 trechos de exemplo (locais citados pela CTTU; valores de risco fictícios)
 
 ```bash
+# M1: base de atropelamentos (data/processed/atropelamentos.parquet + relatório de qualidade)
+# ver docs/11-base-atropelamentos.md para regra, colunas, cobertura e ressalvas
+.venv/bin/python scripts/fetch_datasets.py
+.venv/bin/python scripts/build_atropelamentos.py
+.venv/bin/python -m pytest
+
 # validar um arquivo de trechos
 .venv/bin/python scripts/validar_trechos.py data/contrato/trechos_exemplo.json
 
