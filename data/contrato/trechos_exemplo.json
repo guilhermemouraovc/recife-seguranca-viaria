@@ -1,0 +1,51 @@
+{
+  "versao": 1,
+  "gerado_em": "2026-10-13T12:00:00-03:00",
+  "fonte": "exemplo-manual",
+  "trechos": [
+    {
+      "id": "derby",
+      "nome": "Praça do Derby",
+      "lat": -8.05678,
+      "lon": -34.89953,
+      "raio_m": 120,
+      "risco": "alto",
+      "score": 0.86,
+      "horas": [7, 8, 17, 18, 19],
+      "vel_segura": 30
+    },
+    {
+      "id": "itajai-itacare",
+      "nome": "Rua Itajaí × Rua Itacaré",
+      "lat": -8.11109,
+      "lon": -34.91398,
+      "raio_m": 60,
+      "risco": "medio",
+      "score": 0.52,
+      "horas": [6, 7, 12, 18],
+      "vel_segura": 30
+    },
+    {
+      "id": "dez-de-julho",
+      "nome": "Rua Dez de Julho",
+      "lat": -8.13508,
+      "lon": -34.91229,
+      "raio_m": 80,
+      "risco": "medio",
+      "score": 0.58,
+      "horas": [17, 18, 19, 20],
+      "vel_segura": 30
+    },
+    {
+      "id": "estrada-velha-agua-fria",
+      "nome": "Estrada Velha de Água Fria",
+      "lat": -8.02494,
+      "lon": -34.89747,
+      "raio_m": 150,
+      "risco": "baixo",
+      "score": 0.31,
+      "horas": [],
+      "vel_segura": 40
+    }
+  ]
+}

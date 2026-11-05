@@ -36,6 +36,38 @@ próprio (não confundir com as regras da extração de dados):
 - `pesquisa-qualitativa/README.md` — fluxo completo.
 - Comandos `/pesquisar`, `/consolidar`, `/contestar`, `/fundamentar` em `.claude/commands/`.
 
+## MVP: painel de risco + módulo veicular (fase atual)
+
+Trilhas **Machine Learning** e **Sistemas Embarcados**. O painel mostra trechos e horários
+de maior risco para a CTTU. O módulo ESP32 + CAN + GPS alerta o motorista com som e luz
+quando ele está acima da velocidade segura num trecho de risco.
+
+- `docs/09-contrato-trechos-e-telemetria.md`: formato dos trechos (ML → módulo) e da
+  telemetria MQTT (módulo → plataforma)
+- `docs/10-plano-mvp-e-materiais.md`: responsáveis, materiais e como o MVP cobre os
+  requisitos da trilha
+- `data/contrato/trechos_exemplo.json`: 4 trechos de exemplo (locais citados pela CTTU; valores de risco fictícios)
+
+```bash
+# validar um arquivo de trechos
+.venv/bin/python scripts/validar_trechos.py data/contrato/trechos_exemplo.json
+
+# subir a API (a partir da raiz do repo)
+.venv/bin/pip install -r api/requirements.txt
+.venv/bin/uvicorn api.app.main:app --reload --host 0.0.0.0 --port 8000
+# http://localhost:8000/docs
+```
+
+| Endpoint | Para quem | O que devolve |
+|---|---|---|
+| `GET /saude` | todos | `{"ok": true}` |
+| `GET /trechos` | painel | todos os trechos com nome |
+| `GET /trechos?hora=18` | painel | só os trechos de risco às 18h |
+| `GET /modulo/trechos` | ESP32 | versão compacta, sem `nome` |
+
+`--host 0.0.0.0` deixa a API acessível para o ESP32 na mesma rede Wi-Fi (use o IP do
+computador, ex.: `http://192.168.0.15:8000/modulo/trechos`).
+
 ## Skills disponíveis
 
 - **`extract-pdf-adhoc`** — extração de PDF avulso, fora do fluxo dos PDFs institucionais.
@@ -65,8 +97,9 @@ Estão detalhadas em `CLAUDE.md`, mas as que mais pegam gente de surpresa:
 - **Pesquisa externa (fora dos datasets) sempre com fonte citada e datada** — ver
   `docs/08-fundamentacao-e-oportunidades.md` como exemplo de formato: argumento + link pra
   cada afirmação, e deixado explícito o que é achado vs. o que ainda é hipótese pra ideação.
-- **Ideação de solução ainda não começou** (só na semana 5, ver `docs/00-contexto-cesar.md`)
-  — pesquisa e argumentação valem, mas evite já tratar um caminho de solução como decidido.
+- **A ideação já foi concluída** e o grupo está construindo o MVP (ver seção abaixo e
+  `docs/10-plano-mvp-e-materiais.md`). Mudanças no contrato entre as trilhas
+  (`docs/09`) precisam ser combinadas entre ML e Embarcados.
 
 ## Estrutura
 
@@ -84,13 +117,18 @@ Estão detalhadas em `CLAUDE.md`, mas as que mais pegam gente de surpresa:
 │   ├── 05-arquitetura-extracao.md         # como estruturar o pipeline
 │   ├── 06-limitacoes-metodologicas.md     # ressalvas que não podem ser perdidas
 │   ├── 07-backlog-tarefas.md              # tarefas concretas, em ordem
-│   └── 08-fundamentacao-e-oportunidades.md # argumento do tema + pesquisa externa citada
+│   ├── 08-fundamentacao-e-oportunidades.md # argumento do tema + pesquisa externa citada
+│   ├── 09-contrato-trechos-e-telemetria.md # interface ML ↔ módulo (HTTP e MQTT)
+│   └── 10-plano-mvp-e-materiais.md        # responsáveis, materiais, requisitos da trilha
 ├── scripts/
 │   ├── ckan_client.py / fetch_datasets.py  # pipeline dos datasets CKAN
 │   ├── fetch_pdfs.py / extract_pdfs.py     # pipeline dos PDFs institucionais
 │   ├── extract_adhoc.py                    # extração ad-hoc (skill extract-pdf-adhoc)
 │   ├── manifest.py                         # provenance/idempotência dos downloads
-│   └── build_dashboard_data.py             # gera dados pro dashboard em web/
+│   ├── build_dashboard_data.py             # gera dados pro dashboard em web/
+│   └── validar_trechos.py                  # valida arquivos de trechos contra docs/09
+├── api/                                    # FastAPI do MVP (trechos para painel e módulo)
+├── firmware/                               # código do ESP32 (trilha Embarcados)
 ├── pesquisa-qualitativa/                   # harness da pesquisa com a Secretaria de Trânsito
 │   ├── CLAUDE.md / AGENTS.md               # contrato e papéis (scout/synthesizer/adversary/architect)
 │   ├── research/                           # 00-questions.md, claims.md, sources/, findings/
@@ -99,6 +137,7 @@ Estão detalhadas em `CLAUDE.md`, mas as que mais pegam gente de surpresa:
 ├── data/
 │   ├── raw/       # (git-ignorado) downloads brutos
 │   ├── processed/ # (git-ignorado) dados tratados
+│   ├── contrato/  # arquivos no formato de docs/09 (versionados)
 │   └── adhoc/     # (git-ignorado) entrada/saída da extração ad-hoc de PDF
 └── web/           # dashboard estático (index.html + data.json)
 ```

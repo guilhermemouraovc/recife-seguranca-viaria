@@ -62,6 +62,9 @@ vale a pena investir mais nessa direção para as próximas etapas do projeto.
 
 ## Não fazer ainda
 
+> **Atualização (13/10/2026):** a ideação já foi concluída. As tarefas do MVP estão em
+> `10-plano-mvp-e-materiais.md`; a restrição abaixo vale só para o histórico desta etapa.
+
 Ideação de solução, prototipagem de produto ou definição de trilha técnica — fora de escopo
 enquanto o projeto está na fase de desk research / levantamento de dados (ver
 `01-visao-geral.md`).

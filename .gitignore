@@ -9,3 +9,10 @@ __pycache__/
 .env
 .venv/
 .DS_Store
+
+# MVP: firmware e painel
+.pio/
+.vscode/
+node_modules/
+dist/
+firmware/**/secrets.h

@@ -49,6 +49,21 @@ Trânsito/CTTU), que roda num contrato próprio em `pesquisa-qualitativa/CLAUDE.
 misture as duas: dado aberto/CKAN segue as regras deste arquivo, fundamentação de pergunta de
 entrevista segue as regras de lá.
 
+## Fase do MVP (solução)
+
+A ideação foi concluída. O grupo está construindo o MVP nas trilhas **Machine Learning** e
+**Sistemas Embarcados**: painel de risco por trecho e horário para a CTTU e módulo ESP32 +
+CAN + GPS que alerta o motorista. Antes de mexer em `api/`, `firmware/` ou
+`data/contrato/`, leia:
+
+- `docs/09-contrato-trechos-e-telemetria.md`: interface entre as trilhas. Não mude nomes
+  de campo sem combinar com o grupo; se mudar, incremente `versao` e atualize
+  `scripts/validar_trechos.py`.
+- `docs/10-plano-mvp-e-materiais.md`: plano, materiais e requisitos da trilha.
+
+Todo arquivo de trechos gerado deve passar em `scripts/validar_trechos.py`. As ressalvas
+de `docs/06` também valem para o modelo de risco.
+
 ## O que ainda não foi decidido
 
 O escopo de "todos os ~30 datasets da CTTU + 16 do SAMU" vs. "só os essenciais" (sinistros,
