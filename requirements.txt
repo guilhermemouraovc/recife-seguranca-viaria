@@ -2,4 +2,3 @@ requests
 pandas
 pyarrow
 pdfplumber
-pytest

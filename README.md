@@ -49,15 +49,6 @@ quando ele está acima da velocidade segura num trecho de risco.
 - `data/contrato/trechos_exemplo.json`: 4 trechos de exemplo (locais citados pela CTTU; valores de risco fictícios)
 
 ```bash
-# M1/M1b: base de atropelamentos com coordenadas
-# ver docs/11-base-atropelamentos.md para regra, colunas, cobertura, geocodificação e ressalvas
-.venv/bin/python scripts/fetch_datasets.py          # 1. baixa sinistros + semáforos (CKAN)
-.venv/bin/python scripts/build_atropelamentos.py    # 2. gera a base (offline)
-export NOMINATIM_CONTACT="seu-email@exemplo.com"    #    contato exigido pela política do Nominatim
-.venv/bin/python scripts/geocode_enderecos.py       # 3. geocodifica o que falta (único passo com internet)
-.venv/bin/python scripts/build_atropelamentos.py    # 4. gera a base de novo, agora com o cache
-.venv/bin/python -m pytest                          # testes (não usam internet)
-
 # validar um arquivo de trechos
 .venv/bin/python scripts/validar_trechos.py data/contrato/trechos_exemplo.json
 
@@ -66,13 +57,6 @@ export NOMINATIM_CONTACT="seu-email@exemplo.com"    #    contato exigido pela po
 .venv/bin/uvicorn api.app.main:app --reload --host 0.0.0.0 --port 8000
 # http://localhost:8000/docs
 ```
-
-O passo 3 só consulta o que ainda não está em `data/geocode/cache_nominatim.csv`. Esse cache
-vai para o git, então quem clona o repo já recebe as consultas feitas e normalmente pode
-pular direto para o passo 4. O script respeita o limite de 1 requisição/s do Nominatim e pode
-ser interrompido com Ctrl+C e retomado depois. Para testar antes de rodar tudo:
-`--dry-run` (sem rede) ou `--limite 20`. `NOMINATIM_CONTACT` vai no User-Agent; use o seu
-e-mail ou o do grupo, nunca grave no código.
 
 | Endpoint | Para quem | O que devolve |
 |---|---|---|

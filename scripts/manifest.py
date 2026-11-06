@@ -42,10 +42,6 @@ def needs_download(entries: dict[str, dict], resource: dict, force: bool = False
     previous = entries.get(resource["id"])
     if previous is None:
         return True
-    # The manifest is versioned but data/raw/ isn't: on a fresh clone the entry
-    # exists while the file doesn't (and local_path may be from another machine).
-    if not Path(previous["local_path"]).exists():
-        return True
     return previous.get("resource_last_modified") != resource.get("last_modified")
 
 
@@ -98,8 +94,5 @@ if __name__ == "__main__":
         resource_updated = {**resource, "last_modified": "2026-02-01T00:00:00"}
         assert needs_download(entries, resource_updated), "changed last_modified should re-download"
         assert needs_download(entries, resource, force=True), "--force should always re-download"
-
-        sample_file.unlink()
-        assert needs_download(entries, resource), "missing local file should re-download"
 
         print("manifest self-check passed")
