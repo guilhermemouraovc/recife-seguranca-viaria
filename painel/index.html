@@ -79,6 +79,7 @@
   .popup dl { display: grid; grid-template-columns: auto 1fr; gap: .1rem .6rem; margin: 0; }
   .popup dt { color: var(--texto-2); }
   .popup dd { margin: 0; }
+  .popup .id { margin: .4rem 0 0; color: var(--texto-2); font-size: .75rem; }
   footer {
     padding: .6rem 1rem; border-top: 1px solid var(--borda); background: var(--painel);
     font-size: .8rem; color: var(--texto-2);
@@ -176,15 +177,21 @@ function faixas(horas) {
   return hs.length === 24 ? "dia todo (0h–24h)" : out.join(", ");
 }
 
-function popup(t) {
-  return `<div class="popup"><h3>${esc(t.nome)}</h3><dl>
+// Nome exibido: o id só entra quando dois trechos têm o mesmo nome (ex.: "AV X · c7").
+function rotulos(trechos) {
+  const n = {};
+  for (const t of trechos) n[t.nome] = (n[t.nome] || 0) + 1;
+  return new Map(trechos.map(t => [t.id, n[t.nome] > 1 ? `${t.nome} · ${t.id}` : t.nome]));
+}
+
+function popup(t, nome) {
+  return `<div class="popup"><h3>${esc(nome)}</h3><dl>
     <dt>Risco</dt><dd><span class="chip"><span class="bolinha" style="background:${COR[t.risco]}"></span>${ROTULO[t.risco]}</span></dd>
     <dt>Score</dt><dd>${t.score.toFixed(3)}</dd>
     <dt>Horários de risco</dt><dd>${faixas(t.horas)}</dd>
     <dt>Velocidade segura</dt><dd>${t.vel_segura} km/h</dd>
     <dt>Raio</dt><dd>${t.raio_m} m</dd>
-    <dt>id</dt><dd><code>${esc(t.id)}</code></dd>
-  </dl></div>`;
+  </dl><p class="id">id ${esc(t.id)}</p></div>`;
 }
 
 function focar(id) {
@@ -202,10 +209,11 @@ function render(dados, hora) {
   camada.clearLayers();
   circulos.clear();
   const ordem = [...dados.trechos].sort((a, b) => b.score - a.score);
+  const nome = rotulos(ordem);
   for (const t of ordem) {
     const c = L.circle([t.lat, t.lon], {
       radius: t.raio_m, color: BORDA, weight: 2, fillColor: COR[t.risco], fillOpacity: 0.75
-    }).bindPopup(popup(t)).bindTooltip(esc(t.nome));
+    }).bindPopup(popup(t, nome.get(t.id))).bindTooltip(esc(nome.get(t.id)));
     c.addTo(camada);
     circulos.set(t.id, c);
   }
@@ -215,9 +223,9 @@ function render(dados, hora) {
     `${ordem.length} trecho${ordem.length === 1 ? "" : "s"} de risco ${quando}`;
   const lista = document.getElementById("ranking");
   lista.innerHTML = ordem.length ? ordem.map((t, i) => `
-    <li><button type="button" data-id="${esc(t.id)}" aria-label="${esc(t.nome)}, risco ${ROTULO[t.risco]}, score ${t.score.toFixed(2)}">
+    <li><button type="button" data-id="${esc(t.id)}" aria-label="${esc(nome.get(t.id))}, risco ${ROTULO[t.risco]}, score ${t.score.toFixed(2)}">
       <span class="pos">${i + 1}</span>
-      <span class="nome">${esc(t.nome)}
+      <span class="nome">${esc(nome.get(t.id))}
         <span class="detalhe chip"><span class="bolinha" style="background:${COR[t.risco]}"></span>${ROTULO[t.risco]} · ${faixas(t.horas)}</span>
       </span>
       <span class="score">${t.score.toFixed(2)}</span>
