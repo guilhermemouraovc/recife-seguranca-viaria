@@ -1,7 +1,7 @@
 -- O2: export the risk trechos for the vehicle module (embarcados/) as one JSON array.
 -- Trecho de risco = top 10% of clusters, the same cut sql/03_validacao.sql validates.
 --
--- vel_segura_kmh follows docs/10-velocidade-segura.md (OMS 2023, Tabela 1): 30 km/h where
+-- vel_segura_kmh follows docs/13-velocidade-segura.md (OMS 2023, Tabela 1): 30 km/h where
 -- vulnerable users (pedestre, ciclista, moto) are in the conflict, else 50 km/h (urban
 -- intersections). raio_m has a 200 m floor because the geocoding puts every sinistro of a
 -- street-in-bairro at one point (radius 0 otherwise), and they can be hundreds of m off.

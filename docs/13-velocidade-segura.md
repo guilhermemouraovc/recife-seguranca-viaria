@@ -1,4 +1,4 @@
-# 10 — Velocidade segura: parâmetro de referência
+# 13 — Velocidade segura: parâmetro de referência
 
 Registro do que o projeto usa como "velocidade segura" e do que **não** está definido. Três
 coisas diferentes que não devem ser misturadas em gráfico, score ou texto:

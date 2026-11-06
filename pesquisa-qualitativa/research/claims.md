@@ -120,7 +120,7 @@ status: confirmado
 fonte: `research/sources/oms-speed-management-2023.md` — OMS/GRSP/FIA/Banco Mundial, Speed management, 2ª ed., 2023, Tabela 1 p. 4 e p. 3, acessado 22/10/2026
 evidencia: tabela lida no PDF oficial da OMS (não em resumo de terceiro)
 decisao: D1 (Q1.6) — referência externa pra perguntar qual parâmetro a CTTU usa, sem pressupor que seja este
-contestacao: tentei derrubar por dois lados. (1) Origem: a busca inicial atribuía os valores 30/50/70 à OCDE, não à OMS; o PDF da OMS tem a tabela, citando fontes próprias (4, 5) — sobreviveu. (2) Versão do desk research: `../../docs/08` dizia "OMS: 30–50 km/h" a partir da Folha PE; a fonte primária não dá uma faixa única, e sim um valor por tipo de conflito — a versão de `docs/08` fica corrigida em `../../docs/10-velocidade-segura.md`, não o claim. Confiança `alta`: fonte primária, publicada há menos de 3 anos, lida hoje
+contestacao: tentei derrubar por dois lados. (1) Origem: a busca inicial atribuía os valores 30/50/70 à OCDE, não à OMS; o PDF da OMS tem a tabela, citando fontes próprias (4, 5) — sobreviveu. (2) Versão do desk research: `../../docs/08` dizia "OMS: 30–50 km/h" a partir da Folha PE; a fonte primária não dá uma faixa única, e sim um valor por tipo de conflito — a versão de `docs/08` fica corrigida em `../../docs/13-velocidade-segura.md`, não o claim. Confiança `alta`: fonte primária, publicada há menos de 3 anos, lida hoje
 
 ### C-11 — O PSVR 2026–2036 (Iniciativa 4.3) prevê readequar limites de velocidade "de acordo com parâmetros seguros" sem definir quais são, e lista "análise e simulação de impacto no trânsito" no estudo técnico prévio, sob a SEOPS-CTTU
 tipo: fato

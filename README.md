@@ -129,8 +129,9 @@ Estão detalhadas em `CLAUDE.md`, mas as que mais pegam gente de surpresa:
 │   ├── 08-fundamentacao-e-oportunidades.md # argumento do tema + pesquisa externa citada
 │   ├── 09-contrato-trechos-e-telemetria.md # interface ML ↔ módulo (HTTP e MQTT)
 │   ├── 10-plano-mvp-e-materiais.md        # responsáveis, materiais, requisitos da trilha
-│   ├── 09-criterios-cruzamento.md         # record linkage CTTU × SAMU × SDS (MVP só dado público)
-│   └── 10-velocidade-segura.md            # OMS × CTB × limite municipal (o que está e não está definido)
+│   ├── 11-base-atropelamentos.md        # base de sinistros: pipeline integrado, geocodificação e ressalvas da fonte
+│   ├── 12-criterios-cruzamento.md         # record linkage CTTU × SAMU × SDS (MVP só dado público)
+│   └── 13-velocidade-segura.md            # OMS × CTB × limite municipal (o que está e não está definido)
 ├── scripts/
 │   ├── ckan_client.py / fetch_datasets.py  # pipeline dos datasets CKAN
 │   ├── clean_sinistros.py / geocode_sinistros.py # limpeza + geocodificação dos sinistros

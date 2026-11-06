@@ -1,4 +1,4 @@
-# 09 — Critérios de cruzamento entre as bases
+# 12 — Critérios de cruzamento entre as bases
 
 Como (e até onde) dá para ligar um sinistro da CTTU ao atendimento de saúde (SAMU) e ao
 registro policial (SDS — Secretaria de Defesa Social de PE). Complementa
