@@ -18,8 +18,6 @@ SINISTROS_SLUGS = [
     "acidentes-de-transito-com-vitimas-2015",
     "acidentes-de-transito-c-vitimas-2016",
 ]
-SEMAFOROS_SLUG = "localizacao-dos-semaforos"
-SEMAFOROS_RESOURCE = "Semáforos do Recife"
 
 
 def _safe_filename(name: str, fmt: str) -> str:
@@ -28,11 +26,8 @@ def _safe_filename(name: str, fmt: str) -> str:
     return f"{slug}.{ext}"
 
 
-def fetch_dataset(slug: str, org_dir: str, force: bool = False, resource_names: set[str] | None = None) -> list[Path]:
-    """Download the resources of one CKAN dataset into data/raw/<org_dir>/<slug>/.
-
-    Every resource by default; only those named in resource_names if given.
-    """
+def fetch_dataset(slug: str, org_dir: str, force: bool = False) -> list[Path]:
+    """Download every resource of one CKAN dataset into data/raw/<org_dir>/<slug>/."""
     package = ckan_client.package_show(slug)
     dest_dir = RAW_DIR / org_dir / slug
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -40,8 +35,6 @@ def fetch_dataset(slug: str, org_dir: str, force: bool = False, resource_names: 
     entries = manifest_mod.load()
     downloaded = []
     for resource in package["resources"]:
-        if resource_names is not None and resource.get("name") not in resource_names:
-            continue
         if not manifest_mod.needs_download(entries, resource, force=force):
             continue
         local_path = dest_dir / _safe_filename(resource.get("name") or resource["id"], resource.get("format", ""))
@@ -72,19 +65,11 @@ def fetch_sinistros(force: bool = False) -> None:
         fetch_dataset(slug, org_dir="cttu", force=force)
 
 
-def fetch_semaforos(force: bool = False) -> None:
-    # Only the general list; the other CSVs are subsets by equipment type.
-    print(f"{SEMAFOROS_SLUG}:")
-    fetch_dataset(SEMAFOROS_SLUG, org_dir="cttu", force=force, resource_names={SEMAFOROS_RESOURCE})
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--force", action="store_true", help="re-download even if unchanged")
-    parser.add_argument("--dataset", choices=["sinistros", "semaforos", "all"], default="all")
+    parser.add_argument("--dataset", choices=["sinistros"], default="sinistros")
     args = parser.parse_args()
 
-    if args.dataset in ("sinistros", "all"):
+    if args.dataset == "sinistros":
         fetch_sinistros(force=args.force)
-    if args.dataset in ("semaforos", "all"):
-        fetch_semaforos(force=args.force)
