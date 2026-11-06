@@ -11,10 +11,13 @@
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <style>
   :root {
-    /* Rampa ordinal de um matiz (laranja → vermelho), validada com o validate_palette --ordinal. */
-    --risco-baixo: #f0a050;
-    --risco-medio: #d9552a;
-    --risco-alto: #9c1f1a;
+    /* Cores de risco: definidas só aqui e lidas pelo JS (círculo, legenda e ranking).
+       Três matizes distintos (ΔE >= 17,9 inclusive para daltonismo). Amarelo e laranja têm pouco
+       contraste com o mapa claro, por isso todo marcador leva borda escura e o texto do risco. */
+    --risco-alto: #a50f15;
+    --risco-medio: #f07c0e;
+    --risco-baixo: #ffd60a;
+    --risco-borda: #2b2b2b;
     --fundo: #fcfcfb;
     --painel: #ffffff;
     --borda: #dedcd6;
@@ -66,7 +69,7 @@
   #ranking .score { font-variant-numeric: tabular-nums; color: var(--texto-2); }
   .chip { display: inline-flex; align-items: center; gap: .3rem; }
   .bolinha { width: .75rem; height: .75rem; border-radius: 50%; display: inline-block; flex: none;
-             border: 1px solid rgba(0,0,0,.35); }
+             border: 1.5px solid var(--risco-borda); }
   .vazio { padding: .5rem 1rem; color: var(--texto-2); }
   .legenda { background: #fff; padding: .5rem .7rem; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.25);
              font-size: .85rem; line-height: 1.6; }
@@ -126,11 +129,9 @@
 
 <script>
 const ROTULO = { baixo: "baixo", medio: "médio", alto: "alto" };
-const COR = {
-  baixo: getComputedStyle(document.documentElement).getPropertyValue("--risco-baixo").trim(),
-  medio: getComputedStyle(document.documentElement).getPropertyValue("--risco-medio").trim(),
-  alto:  getComputedStyle(document.documentElement).getPropertyValue("--risco-alto").trim(),
-};
+const css = getComputedStyle(document.documentElement);
+const COR = Object.fromEntries(["alto", "medio", "baixo"].map(r => [r, css.getPropertyValue(`--risco-${r}`).trim()]));
+const BORDA = css.getPropertyValue("--risco-borda").trim();
 
 const mapa = L.map("mapa", { zoomControl: true }).setView([-8.05, -34.92], 12);
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -203,7 +204,7 @@ function render(dados, hora) {
   const ordem = [...dados.trechos].sort((a, b) => b.score - a.score);
   for (const t of ordem) {
     const c = L.circle([t.lat, t.lon], {
-      radius: t.raio_m, color: "#3a1210", weight: 1.5, fillColor: COR[t.risco], fillOpacity: 0.6
+      radius: t.raio_m, color: BORDA, weight: 2, fillColor: COR[t.risco], fillOpacity: 0.75
     }).bindPopup(popup(t)).bindTooltip(esc(t.nome));
     c.addTo(camada);
     circulos.set(t.id, c);
