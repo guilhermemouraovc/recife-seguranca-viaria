@@ -3,7 +3,8 @@
 -- scripts/validar_trechos.py.
 --
 -- Configuration via psql variables (load_postgis.sh passes them; defaults below):
---   m4_apenas_atropelamentos (true|false), m4_eps_m, m4_min_pts.
+--   m4_apenas_atropelamentos (true|false), m4_eps_m, m4_min_pts. Default = the configuration
+--   chosen in docs/11 (atropelamentos, eps 100 m, min_pts 5).
 -- Trecho de risco = top 10% of clusters, the same cut sql/03_validacao.sql validates.
 --
 -- id       'c<posicao>' (position by score; ties broken by cluster_id so ids stay unique).
@@ -19,7 +20,7 @@
 -- ponytail: 25% vulneravel, 25% faixa, 200 m and the top-10% cut are calibration knobs, not findings.
 \if :{?m4_apenas_atropelamentos}
 \else
-\set m4_apenas_atropelamentos false
+\set m4_apenas_atropelamentos true
 \endif
 \if :{?m4_eps_m}
 \else
@@ -27,7 +28,7 @@
 \endif
 \if :{?m4_min_pts}
 \else
-\set m4_min_pts 10
+\set m4_min_pts 5
 \endif
 
 WITH cfg AS (
