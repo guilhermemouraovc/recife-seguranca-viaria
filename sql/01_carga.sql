@@ -15,11 +15,13 @@ CREATE TABLE sinistros (
     endereco text,
     numero text,
     atropelamento boolean,
+    criterio_atropelamento text,  -- tipo+pedestre | tipo | pedestre | NULL (informativo)
     usuario_vulneravel text,
     vitimas int,
     vitimasfatais int,
     data_fora_do_ano_arquivo boolean,
-    geo_precisao text,  -- semaforo | via_bairro | via | NULL (see geocode_sinistros.py)
+    geo_precisao text,    -- semaforo | endereco_numero | endereco_via | semaforo_nao_confere | endereco_nao_confere | NULL
+    coord_precisao text,  -- alta | media | baixa | NULL (see geocode_sinistros.py, docs/11)
     lat float8,
     lon float8,
     geom geometry(Point, 31985)
@@ -27,9 +29,10 @@ CREATE TABLE sinistros (
 COMMENT ON TABLE sinistros IS
     'Chamados de sinistro CTTU 2015-2024 (dados abertos). 2015 so desde junho; chamados != numeros '
     'oficiais dos Relatorios Anuais; dez/2025 no arquivo 2024 e preliminar/suspeito; geom de trecho de '
-    'rua, nao do ponto exato. Ver data/processed/sinistros/README.md.';
+    'rua (endereco_via) ou do semaforo, nao do ponto exato. Geocodificacao (c) colaboradores do '
+    'OpenStreetMap, ODbL. Ver docs/11-base-atropelamentos.md.';
 
-\copy sinistros (ano_arquivo, data, hora, gravidade, tipo_acidente, situacao, bairro, endereco, numero, atropelamento, usuario_vulneravel, vitimas, vitimasfatais, data_fora_do_ano_arquivo, geo_precisao, lat, lon) FROM '/data/sinistros/sinistros_geo.csv' WITH (FORMAT csv, HEADER true)
+\copy sinistros (ano_arquivo, data, hora, gravidade, tipo_acidente, situacao, bairro, endereco, numero, atropelamento, criterio_atropelamento, usuario_vulneravel, vitimas, vitimasfatais, data_fora_do_ano_arquivo, geo_precisao, coord_precisao, lat, lon) FROM '/data/sinistros/sinistros_geo.csv' WITH (FORMAT csv, HEADER true)
 
 UPDATE sinistros SET geom = ST_Transform(ST_SetSRID(ST_MakePoint(lon, lat), 4326), 31985)
 WHERE lat IS NOT NULL;
