@@ -36,6 +36,21 @@ def _to_int(s: pd.Series) -> pd.Series:
     return pd.to_numeric(s.str.replace(",", ".", regex=False), errors="coerce").astype("Int64")
 
 
+def criterio_atropelamento(tipo: pd.Series, pedestre: pd.Series) -> pd.Series:
+    """'tipo+pedestre' | 'tipo' | 'pedestre' | None -- which rule makes the row a pedestrian collision.
+
+    tipo: any ATROPELAMENTO variant except animal ones (ATROPELAMENTO, ATROPELAMENTO DE PESSOA;
+    not ATROPELAMENTO [DE] ANIMAL). pedestre: participant count (> 0 = pedestrian involved).
+    Informative only: the `atropelamento` flag stays the tipo-only rule.
+    """
+    tipo_norm = tipo.fillna("").map(lambda s: _unaccent(str(s)).upper())
+    por_tipo = tipo_norm.str.contains("ATROPELAMENTO") & ~tipo_norm.str.contains("ANIMAL")
+    por_pedestre = pd.to_numeric(pedestre, errors="coerce").fillna(0) > 0
+    criterio = ["tipo+pedestre" if t and p else "tipo" if t else "pedestre" if p else None
+                for t, p in zip(por_tipo, por_pedestre)]
+    return pd.Series(criterio, index=tipo.index, dtype="object")
+
+
 def load_year(csv_path: Path) -> pd.DataFrame:
     df = pd.read_csv(csv_path, sep=";", dtype=str, keep_default_na=False)
     df.columns = df.columns.str.lower()
@@ -88,6 +103,7 @@ def clean(raw: pd.DataFrame) -> pd.DataFrame:
     # 'ATROPELAMENTO' / 'ATROPELAMENTO DE PESSOA' (name changed in 2019); animals excluded.
     out["atropelamento"] = out["tipo_acidente"].str.startswith("ATROPELAMENTO", na=False) & \
         ~out["tipo_acidente"].str.contains("ANIMAL", na=False)
+    out["criterio_atropelamento"] = criterio_atropelamento(out["tipo_acidente"], out["pedestre"])
     # Counts are participants by type, NOT victims -- the source doesn't say who got hurt.
     out["envolve_pedestre"] = out["pedestre"].fillna(0) > 0
     out["envolve_ciclista"] = (out["ciclista"].fillna(0) > 0) | out["tipo_acidente"].eq("COLISÃO COM CICLISTA")
@@ -105,6 +121,7 @@ def readme(df: pd.DataFrame) -> str:
     por_ano = df.groupby("ano_arquivo").agg(
         sinistros=("ano_arquivo", "size"),
         atropelamentos=("atropelamento", "sum"),
+        tipo_ou_pedestre=("criterio_atropelamento", "count"),
         com_pedestre=("envolve_pedestre", "sum"),
         com_ciclista=("envolve_ciclista", "sum"),
         com_moto=("envolve_moto", "sum"),
@@ -132,9 +149,13 @@ Gerado por `scripts/clean_sinistros.py` a partir de `data/raw/cttu/acidentes-de-
 7. **2015 tem `tipo`/`natureza` trocadas na fonte** — destrocado aqui (`gravidade`, `tipo_acidente`).
 8. `tipo_acidente` muda de vocabulário em 2019 (ex.: `ATROPELAMENTO` → `ATROPELAMENTO DE PESSOA`,
    `COLISÃO` → `COLISÃO TRASEIRA/LATERAL/...`). `atropelamento` cobre os dois.
-9. `situacao` inclui `CANCELADA` e `DUPLICIDADE` — mantidas; decidir na análise se entram na contagem.
-10. Sem lat/long na fonte — ver `geocode_sinistros.py` e a coluna de precisão antes de análise espacial.
-11. Colunas de contexto (`tempo_clima`, `sinalizacao`...) só são preenchidas de 2018 a 2022 (vazias em 2023–2024, apesar de a coluna existir) e têm preenchimento
+9. `criterio_atropelamento` (`tipo+pedestre`, `tipo`, `pedestre` ou vazio) diz por qual regra a linha
+   seria atropelamento; `atropelamento` continua sendo só a regra do `tipo`. Contagem:
+   {df['criterio_atropelamento'].value_counts().to_dict()}. Quem quiser incluir os casos só com pedestre
+   contado (`pedestre`, ex.: `COLISÃO` com pedestre) usa `criterio_atropelamento.notna()` e diz que fez.
+10. `situacao` inclui `CANCELADA` e `DUPLICIDADE` — mantidas; decidir na análise se entram na contagem.
+11. Sem lat/long na fonte — ver `geocode_sinistros.py` e a coluna de precisão antes de análise espacial.
+12. Colunas de contexto (`tempo_clima`, `sinalizacao`...) só são preenchidas de 2018 a 2022 (vazias em 2023–2024, apesar de a coluna existir) e têm preenchimento
     irregular (tabela abaixo) — mudança de formulário, não necessariamente dado faltante.
 
 ## Normalização aplicada
