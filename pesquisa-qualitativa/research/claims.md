@@ -110,3 +110,41 @@ fonte: `research/sources/recife-semaforos-inteligentes-2024.md` — Diário de P
 evidencia: R$ 1,07 milhão investidos; avenidas Antônio de Góes (corredor completo) e Abdias de Carvalho (trecho Chesf–Estádio); ~140 mil veículos/dia; sistema de câmeras que "conversam entre si" e ajustam o tempo de ciclo a partir do tráfego observado em tempo real — não é previsão de impacto de mudança futura, é adaptação ao presente
 decisao: D1 (Q1.1, Q1.5) — RESPONDE Q1.5 diretamente: sim, existe tecnologia de ajuste automático (controle adaptativo), documentada publicamente, em pelo menos 2 corredores desde 2024. Não responde Q1.1 na forma original (previsão de impacto *antes* de implementar uma mudança) — essa parte continua em aberto pra entrevista
 contestacao: 3 fontes de imprensa independentes entre si (mesma nota oficial, mas veiculada por 3 redações distintas, sem contradição entre elas) — não refutado; confiança fica em `media`, não `alta`, porque o evento tem mais de 12 meses (07/2024) e não há confirmação de que o programa segue ativo/foi expandido em 2026
+
+## D1 — velocidade segura (22/10/2026)
+
+### C-10 — A OMS define velocidade segura por tipo de conflito: 30 km/h (carro × pedestre/ciclista), 50 km/h (interseção com colisão lateral), 70 km/h (colisão frontal), 100 km/h (sem conflito lateral/frontal); motociclistas têm limiar parecido com o de pedestres
+tipo: fato
+confianca: alta
+status: confirmado
+fonte: `research/sources/oms-speed-management-2023.md` — OMS/GRSP/FIA/Banco Mundial, Speed management, 2ª ed., 2023, Tabela 1 p. 4 e p. 3, acessado 22/10/2026
+evidencia: tabela lida no PDF oficial da OMS (não em resumo de terceiro)
+decisao: D1 (Q1.6) — referência externa pra perguntar qual parâmetro a CTTU usa, sem pressupor que seja este
+contestacao: tentei derrubar por dois lados. (1) Origem: a busca inicial atribuía os valores 30/50/70 à OCDE, não à OMS; o PDF da OMS tem a tabela, citando fontes próprias (4, 5) — sobreviveu. (2) Versão do desk research: `../../docs/08` dizia "OMS: 30–50 km/h" a partir da Folha PE; a fonte primária não dá uma faixa única, e sim um valor por tipo de conflito — a versão de `docs/08` fica corrigida em `../../docs/13-velocidade-segura.md`, não o claim. Confiança `alta`: fonte primária, publicada há menos de 3 anos, lida hoje
+
+### C-11 — O PSVR 2026–2036 (Iniciativa 4.3) prevê readequar limites de velocidade "de acordo com parâmetros seguros" sem definir quais são, e lista "análise e simulação de impacto no trânsito" no estudo técnico prévio, sob a SEOPS-CTTU
+tipo: fato
+confianca: media
+status: confirmado
+fonte: `research/sources/psvr-iniciativa-4-3-velocidade.md` — texto extraído do PDF oficial do PSVR neste repo, relido em 22/10/2026
+evidencia: objetivo e ações da Iniciativa 4.3 lidos no texto; nenhuma ocorrência de "km/h" no texto extraído inteiro do PSVR
+decisao: D1 (Q1.6 e, indiretamente, Q1.1 — "simulação de impacto" aparece como ação planejada, não como prática existente); D2 (Q2.2 — SEOPS-CTTU como responsável pela 4.3)
+contestacao: risco de a ausência ser artefato da extração (valor numa tabela-imagem que o pdfplumber não lê). A busca foi no texto inteiro e o objetivo da 4.3 foi lido diretamente, mas não abri o PDF página a página — por isso `media`, não `alta`. Também não se pode ler "parâmetros seguros" como sinônimo de C-10: o PSVR não cita a tabela da OMS (cita a OMS só pelo Global Status Report 2023 nas referências)
+
+### C-12 — A lei municipal do Plano de Mobilidade Urbana do Recife (art. 34) fixaria 50 km/h como máximo para vias arteriais e 60 km/h para as de trânsito rápido
+tipo: fato
+confianca: media
+status: proposto
+fonte: `research/sources/recife-plano-mobilidade-limites-velocidade.md` — Diário de Pernambuco (31/07/2026) e Folha PE, acessados 22/10/2026, citando a lei municipal (não lida)
+evidencia: imprensa atribui ao art. 34 o limite de 50 km/h nas arteriais (base da redução da Av. Boa Viagem de 60 para 50 km/h); minuta de 2018 trazia 60/50/40/30 km/h por classe viária
+decisao: D1 (Q1.6) — se confirmado, Recife já tem um limite legal municipal mais baixo que o padrão do CTB (60 km/h nas arteriais) e igual ao limiar de colisão lateral da OMS ([C-10])
+contestacao: não sobe para `confirmado`. (1) Número da lei e texto final do art. 34 não localizados. (2) Uma emenda ao PL 42/2021 trata o art. 34 como critério de travessia de pedestre, não de velocidade — pode ser renumeração na tramitação ou erro da imprensa. (3) Duas matérias, provavelmente da mesma nota da CTTU, não são duas fontes independentes (ver `../../docs/06` #10). Para confirmar: ler a lei no SAPL da Câmara do Recife ou no Diário Oficial
+
+### C-13 — Não se sabe qual referência técnica a CTTU usa para definir "velocidade segura" / "parâmetros seguros" nem quais vias estão em cada classe viária
+tipo: lacuna
+confianca: baixa
+status: proposto
+fonte: buscas em 22/10/2026 — `grep -i "km/h\|velocidade segura\|limite de velocidade"` em `../../data/processed/pdf/` (PSVR e Relatórios Anuais 2020–2024) e `../../docs/`; web: "CTTU Recife readequação limites de velocidade estudo técnico 2026", "Lei municipal Recife Plano de Mobilidade Urbana 2021 art. 34 velocidade máxima vias arteriais 50 km/h"
+evidencia: os Relatórios Anuais só citam 30 km/h (e 20 km/h no Jardim Monte Verde) em intervenções pontuais; o PSVR não define o parâmetro ([C-11]); o limite municipal está só na imprensa ([C-12]); nenhuma das bases de dados abertas baixadas traz a classificação viária
+decisao: D1 (Q1.6)
+contestacao: lacuna de busca, não afirmação sobre a CTTU — a referência pode existir em documento interno, no estudo técnico exigido pela CONTRAN 798/2020 ([C-07]) ou no Manual de Desenho de Ruas do Recife (2023, citado no Relatório 2022), que não foi lido

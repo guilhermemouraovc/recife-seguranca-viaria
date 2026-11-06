@@ -19,6 +19,19 @@ pra usar — sem precisar redescobrir nada do zero a cada conversa.
    pandas, pyarrow, pdfplumber). Use `.venv/bin/python`, não o Python do sistema.
 3. Pra rodar a pipeline principal:
    - `scripts/fetch_datasets.py` — baixa os datasets do Portal de Dados Abertos (CKAN).
+   - `scripts/clean_sinistros.py` — limpa os sinistros 2015–2024 em
+     `data/processed/sinistros/` (parquet + README com as ressalvas).
+   - `scripts/geocode_sinistros.py` — adiciona lat/lon (semáforo conferido ou OpenStreetMap,
+     com `geo_precisao`/`coord_precisao`). Lento: ~1 req/s, exige `NOMINATIM_CONTACT`; o cache
+     versionado `data/geocode/cache_nominatim.csv` evita repetir consultas, e `--offline` só
+     aplica o cache. Detalhes e ressalvas: `docs/11-base-atropelamentos.md`.
+   - `scripts/load_postgis.sh` — sobe PostGIS no Docker (`compose.yml`, porta 5433), carrega
+     os sinistros com geometria + índice espacial (`sql/01_carga.sql`), calcula clusters e
+     score de risco (`sql/02_risco.sql`) e valida contra os locais de intervenção da CTTU
+     (`sql/03_validacao.sql`, `sql/locais_validacao.csv`). Consulta:
+     `docker compose exec db psql -U postgres`, ex. `SELECT * FROM risco_clusters('2023-01-01')`.
+     No fim grava `data/contrato/trechos.json` (formato de `docs/09`, `sql/04_trechos.sql`) e roda
+     `scripts/validar_trechos.py` nele. Configuração: `M4_APENAS_ATROPELAMENTOS`, `M4_EPS_M`, `M4_MIN_PTS`.
    - `scripts/fetch_pdfs.py` + `scripts/extract_pdfs.py` — baixa e extrai os PDFs
      institucionais (PSVR + Relatórios Anuais).
    - `scripts/build_dashboard_data.py` / `web/` — dashboard exploratório dos dados já
@@ -119,9 +132,14 @@ Estão detalhadas em `CLAUDE.md`, mas as que mais pegam gente de surpresa:
 │   ├── 07-backlog-tarefas.md              # tarefas concretas, em ordem
 │   ├── 08-fundamentacao-e-oportunidades.md # argumento do tema + pesquisa externa citada
 │   ├── 09-contrato-trechos-e-telemetria.md # interface ML ↔ módulo (HTTP e MQTT)
-│   └── 10-plano-mvp-e-materiais.md        # responsáveis, materiais, requisitos da trilha
+│   ├── 10-plano-mvp-e-materiais.md        # responsáveis, materiais, requisitos da trilha
+│   ├── 11-base-atropelamentos.md        # base de sinistros: pipeline integrado, geocodificação e ressalvas da fonte
+│   ├── 12-criterios-cruzamento.md         # record linkage CTTU × SAMU × SDS (MVP só dado público)
+│   └── 13-velocidade-segura.md            # OMS × CTB × limite municipal (o que está e não está definido)
 ├── scripts/
 │   ├── ckan_client.py / fetch_datasets.py  # pipeline dos datasets CKAN
+│   ├── clean_sinistros.py / geocode_sinistros.py # limpeza + geocodificação dos sinistros
+│   ├── load_postgis.sh                     # PostGIS + score de risco (usa sql/ e compose.yml)
 │   ├── fetch_pdfs.py / extract_pdfs.py     # pipeline dos PDFs institucionais
 │   ├── extract_adhoc.py                    # extração ad-hoc (skill extract-pdf-adhoc)
 │   ├── manifest.py                         # provenance/idempotência dos downloads
@@ -137,6 +155,7 @@ Estão detalhadas em `CLAUDE.md`, mas as que mais pegam gente de surpresa:
 ├── data/
 │   ├── raw/       # (git-ignorado) downloads brutos
 │   ├── processed/ # (git-ignorado) dados tratados
+│   ├── geocode/   # cache do Nominatim (versionado; nunca repetir consulta)
 │   ├── contrato/  # arquivos no formato de docs/09 (versionados)
 │   └── adhoc/     # (git-ignorado) entrada/saída da extração ad-hoc de PDF
 └── web/           # dashboard estático (index.html + data.json)

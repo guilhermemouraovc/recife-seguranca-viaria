@@ -66,7 +66,7 @@ fonte qualitativa/semiestruturada a ser extraída do PDF, não como uma tabela r
 - Atendimento SAMU **pode corresponder** a um Sinistro da CTTU quando `subtipo` menciona
   trânsito — mas essa é uma correspondência **probabilística por data + hora + bairro
   aproximados**, nunca uma chave exata. Trate qualquer join SAMU↔CTTU como uma hipótese a
-  validar, não como um fato.
+  validar, não como um fato. Critérios detalhados em `12-criterios-cruzamento.md`.
 
 ## O que NÃO existe (e não deve ser assumido)
 

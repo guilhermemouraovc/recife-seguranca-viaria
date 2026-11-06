@@ -26,8 +26,12 @@ def _safe_filename(name: str, fmt: str) -> str:
     return f"{slug}.{ext}"
 
 
-def fetch_dataset(slug: str, org_dir: str, force: bool = False) -> list[Path]:
-    """Download every resource of one CKAN dataset into data/raw/<org_dir>/<slug>/."""
+def fetch_dataset(slug: str, org_dir: str, force: bool = False,
+                  resource_names: set[str] | None = None) -> list[Path]:
+    """Download the resources of one CKAN dataset into data/raw/<org_dir>/<slug>/.
+
+    Every resource by default; only those named in resource_names if given.
+    """
     package = ckan_client.package_show(slug)
     dest_dir = RAW_DIR / org_dir / slug
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -35,6 +39,8 @@ def fetch_dataset(slug: str, org_dir: str, force: bool = False) -> list[Path]:
     entries = manifest_mod.load()
     downloaded = []
     for resource in package["resources"]:
+        if resource_names is not None and resource.get("name") not in resource_names:
+            continue
         if not manifest_mod.needs_download(entries, resource, force=force):
             continue
         local_path = dest_dir / _safe_filename(resource.get("name") or resource["id"], resource.get("format", ""))
@@ -59,17 +65,25 @@ def fetch_dataset(slug: str, org_dir: str, force: bool = False) -> list[Path]:
     return downloaded
 
 
-def fetch_sinistros(force: bool = False) -> None:
-    for slug in SINISTROS_SLUGS:
+# Section C -- lat/long of each semaforo; used to geocode sinistros via num_semaforo.
+SEMAFOROS_SLUGS = ["localizacao-dos-semaforos"]
+
+# Only the general list "Semáforos do Recife"; the dataset's other CSVs (with cyclist
+# signal, pedestrian lighting, for the visually impaired) are subsets by equipment type.
+RESOURCE_FILTER = {"localizacao-dos-semaforos": {"Semáforos do Recife"}}
+
+DATASETS = {"sinistros": SINISTROS_SLUGS, "semaforos": SEMAFOROS_SLUGS}
+
+
+def fetch_group(name: str, force: bool = False) -> None:
+    for slug in DATASETS[name]:
         print(f"{slug}:")
-        fetch_dataset(slug, org_dir="cttu", force=force)
+        fetch_dataset(slug, org_dir="cttu", force=force, resource_names=RESOURCE_FILTER.get(slug))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--force", action="store_true", help="re-download even if unchanged")
-    parser.add_argument("--dataset", choices=["sinistros"], default="sinistros")
+    parser.add_argument("--dataset", choices=list(DATASETS), default="sinistros")
     args = parser.parse_args()
-
-    if args.dataset == "sinistros":
-        fetch_sinistros(force=args.force)
+    fetch_group(args.dataset, force=args.force)

@@ -1,0 +1,19 @@
+# PostGIS for the sinistros (M3). Load with scripts/load_postgis.sh.
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    platform: linux/amd64  # no official arm64 image; runs emulated on Apple Silicon
+    environment:
+      POSTGRES_PASSWORD: postgres  # ponytail: local-only dev DB, no secrets in it
+    ports: ["5433:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./data/processed:/data:ro
+      - ./sql:/sql:ro
+    healthcheck:
+      # -h 127.0.0.1: the init-time temp server is socket-only, so this waits for the real one
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres"]
+      interval: 2s
+      retries: 30
+volumes:
+  pgdata:
