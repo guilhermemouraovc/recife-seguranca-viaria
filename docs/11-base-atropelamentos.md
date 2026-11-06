@@ -1,19 +1,14 @@
 # 11 — Base limpa de atropelamentos (tarefa M1)
 
 Uma linha por sinistro de atropelamento de pessoa no Recife, 2015–2024, com coordenada
-vinda do semáforo informado no chamado (M1) ou da geocodificação do endereço (M1b). É a
-entrada do modelo de risco (M4), que agrupa por `local_id`.
+quando ela pode ser obtida sem geocodificador. É a entrada do modelo de risco (M4), que
+agrupa por `local_id`.
 
 ```bash
-.venv/bin/python scripts/fetch_datasets.py          # 1. sinistros + semáforos
-.venv/bin/python scripts/build_atropelamentos.py    # 2. gera a base (offline)
-export NOMINATIM_CONTACT="seu-email@exemplo.com"
-.venv/bin/python scripts/geocode_enderecos.py       # 3. único passo com internet (pula o que está no cache)
-.venv/bin/python scripts/build_atropelamentos.py    # 4. gera a base de novo, com o cache
-.venv/bin/python -m pytest                          # testes (sem internet)
+.venv/bin/python scripts/fetch_datasets.py          # sinistros + semáforos
+.venv/bin/python scripts/build_atropelamentos.py    # gera o Parquet e o relatório
+.venv/bin/python -m pytest                          # testes de normalização e da regra
 ```
-
-Como o cache de geocodificação está no git, quem clona o repo normalmente pula o passo 3.
 
 Saídas (fora do git, em `data/processed/`):
 
@@ -21,12 +16,6 @@ Saídas (fora do git, em `data/processed/`):
   arquivo (chave `ressalvas`).
 - `atropelamentos_qualidade.json`: relatório de cobertura e diagnóstico da fonte,
   regenerado a cada execução.
-- `amostra_conferencia.csv`: 30 atropelamentos com coordenada (sorteio com seed 42), com
-  link do OpenStreetMap e colunas vazias `conferido_ok` / `observacao` para o grupo
-  conferir à mão.
-
-No git, em `data/geocode/`: `cache_nominatim.csv`, uma linha por consulta feita ao
-Nominatim (inclusive as que falharam).
 
 ## De onde vêm os dados
 
@@ -34,7 +23,6 @@ Nominatim (inclusive as que falharam).
 |---|---|---|
 | `acidentes-de-transito-com-e-sem-vitimas` | um CSV por ano, 2015–2024 | sinistros |
 | `localizacao-dos-semaforos` | só **"Semáforos do Recife"** (712 semáforos) | lat/lon |
-| Nominatim / OpenStreetMap (ODbL) | API de busca, via `geocode_enderecos.py` | lat/lon dos endereços |
 
 Os outros três CSVs de semáforos (com sinalizador para ciclistas, iluminação suspensa para
 pedestres, para deficientes visuais) são subconjuntos por tipo de equipamento e não são
@@ -91,15 +79,9 @@ Se a M4 quiser uma definição mais estrita, filtre `criterio_atropelamento != "
 | `pedestre`, `moto`, `ciclista`, `auto`, `onibus`, `caminhao` | int | contagens; **vazio → null** |
 | `vitimas`, `vitimasfatais` | int | contagens; vazio → null; `vitimasfatais` null em todo 2015 (coluna não existe) |
 | `gravidade` | texto | ver abaixo |
-| `lat`, `lon` | float | coordenada final, escolhida pela prioridade da seção "Geocodificação" |
-| `coord_fonte` | texto | `semaforo`, `endereco_numero`, `endereco_via`, `semaforo_nao_confere`, `endereco_nao_confere` ou null |
-| `coord_precisao` | texto | `alta` (semaforo, endereco_numero), `media` (endereco_via), `baixa` (os dois `*_nao_confere`) ou null |
-| `geo_display_name` | texto | endereço devolvido pelo Nominatim, quando a coordenada final vem dele |
-| `lat_semaforo`, `lon_semaforo` | float | coordenada do semáforo, mantida separada para auditoria |
-| `coord_confere` | bool | o semáforo bate com bairro ou rua do sinistro; null sem semáforo (ver abaixo) |
-| `geo_nivel` | texto | resultado do geocode: `numero`, `via`, `outro`, `falhou` ou null (não consultado) |
-| `geo_tentativa` | texto | consulta que deu o resultado usado: `a`, `b` ou `c` |
-| `geo_bairro_confere`, `geo_rua_confere` | bool | o resultado do geocode está no bairro do sinistro / é a rua pedida |
+| `lat`, `lon` | float | do semáforo, ver abaixo |
+| `coord_fonte` | texto | `"semaforo"` quando há coordenada, null caso contrário |
+| `coord_confere` | bool | null sem coordenada; ver abaixo |
 | `local_id` | texto | ver abaixo |
 | `criterio_atropelamento` | texto | ver acima |
 
@@ -124,11 +106,11 @@ contradiz em alguns casos (ex.: 31 atropelamentos `VÍTIMA FATAL` com `vitimas` 
 `natureza` prevalece. "Sem vítima" num atropelamento é estranho, mas é o que a fonte diz —
 não foi reclassificado.
 
-## Coordenada por semáforo (M1)
+## Como as coordenadas são obtidas
 
-Os sinistros não têm lat/lon. A primeira fonte é o semáforo informado em `num_semaforo`:
-junção exata `num_semaforo_norm` = `semaforo_norm` (os dois lados sem zeros à esquerda e sem
-`,0`), guardada em `lat_semaforo`/`lon_semaforo`. Linhas sem coordenada nenhuma ficam com
+Os sinistros não têm lat/lon. A única coordenada usada é a do semáforo informado em
+`num_semaforo`: junção exata `num_semaforo_norm` = `semaforo_norm` (os dois lados sem zeros à
+esquerda e sem `,0`). **Nenhum geocodificador externo é chamado.** Linhas sem par ficam com
 `lat`/`lon` null e continuam na base.
 
 Ajustes no dataset de semáforos (registrados em `diagnostico_fonte.ajustes_semaforo` do JSON):
@@ -157,124 +139,8 @@ Limitações para a M4:
 - `end-...` junta a via inteira dentro do bairro (`end-av-caxanga-caxanga` tem 62
   atropelamentos), não um trecho. Não é a mesma granularidade de `sem-...`.
 - 822 `local_id` distintos em 2.165 linhas.
-- `local_id` não usa a coordenada geocodificada: o agrupamento espacial é tarefa da M4.
 
-## Geocodificação (M1b)
-
-Geocodificação © colaboradores do OpenStreetMap, ODbL.
-
-### Método
-
-`scripts/geocode_enderecos.py` é o único script da M1/M1b que acessa a internet. Ele
-consulta o [Nominatim](https://nominatim.openstreetmap.org/) para cada combinação única de
-(`endereco_norm`, `endereco`, `numero`, `bairro`) das linhas **sem** semáforo confirmado
-(`coord_confere` diferente de `True`): 1.207 combinações em 2.165 linhas.
-
-1. **Rua da consulta:** a abreviação inicial de `endereco_norm` é expandida (`AV`→Avenida,
-   `R`→Rua, `EST`→Estrada, `PCA`/`PRC`→Praça, `TV`/`TRV`→Travessa, `PTE`→Ponte, `LGO`→Largo,
-   `LAD`→Ladeira, `VDO`→Viaduto, `COR`→Corredor, `C`→Cais). Quando o `endereco` original já
-   escreve o tipo por extenso e não tem abreviação com ponto (ex.: `RUA DIADEMA`), ele é usado
-   no lugar.
-2. **Tentativas** (`format=jsonv2`, `addressdetails=1`, `limit=1`, `countrycodes=br`, viewbox
-   do Recife `-35.10,-7.80,-34.80,-8.30` com `bounded=1`):
-   - (a) `street="<numero> <rua>"`, `city=Recife`, `state=Pernambuco`, só quando `numero` é
-     um inteiro positivo (`XX`, `S/N`, `312A` não são enviados);
-   - (b) a mesma consulta sem número;
-   - (c) `q="<rua>, <bairro>, Recife, Pernambuco"`.
-
-   Para no primeiro resultado. **Exceção:** se o resultado de (a) ou (b) não confere o bairro
-   ou a rua (ver abaixo), (c) também é consultada, e o resultado de (c) é usado se ele
-   conferir. Motivo: uma consulta só pela rua devolve um trecho qualquer da via. Em vias
-   longas (Av. Beberibe, Estrada de Belém) ou com nome repetido em mais de um bairro
-   (Rua do Sol), esse trecho costuma estar em outro bairro. Nessa base, (c) resolveu 183
-   pares rua+bairro que (b) tinha colocado no bairro errado.
-3. **Cache:** cada consulta vira uma linha em `data/geocode/cache_nominatim.csv`, com chave
-   igual ao texto da consulta normalizado, tentativa, lat, lon, `display_name`, `osm_type`,
-   `osm_id`, `class`, `type`, `bairro_retornado` (suburb/neighbourhood), o `addressdetails`
-   completo (`componentes`), `nivel` e `consultado_em`. Falhas também ficam no cache, e nada
-   é consultado duas vezes.
-4. **Nível:** `numero` se o resultado tem `house_number`; `via` se é uma rua
-   (`class=highway`); `outro` se é um lugar que não é nem um nem outro (ex.: um bairro);
-   `falhou` se não achou nada.
-
-**Política de uso do Nominatim:** no máximo 1 requisição por segundo; User-Agent com o
-projeto e o contato lido de `NOMINATIM_CONTACT` (o script não roda sem ela); backoff com até
-3 novas tentativas em 429/5xx; parada imediata em 403. O cache é salvo a cada 25 consultas e
-no Ctrl+C, então o script pode ser interrompido e retomado. `--dry-run` mostra o que seria
-consultado sem acessar a rede; `--limite N` processa só N endereços.
-
-### Conferências
-
-- **Bairro confere:** o `bairro` do sinistro, sem acento e em maiúsculas, é igual a algum
-  nível abaixo da cidade no endereço devolvido (`suburb`, `neighbourhood`, `quarter`,
-  `city_district`...) **ou** a alguma parte do `display_name`. O `display_name` entra porque o
-  `addressdetails` guarda um só valor por nível. Na Rua Caburaí, por exemplo,
-  `suburb` = "UR-07" (um conjunto habitacional) e o bairro oficial "Várzea" só aparece no
-  `display_name`. "Recife" nunca conta como bairro.
-- **Rua confere:** pelo menos metade das palavras significativas da rua pedida aparece no
-  nome da rua devolvida, com tolerância a pequenas diferenças de grafia (`TAQUARITINGA` ×
-  "Taquaratinga"). Foi necessária porque o Nominatim às vezes responde com outra rua
-  ("RUA DA CUSTODIA" → "Rua Rosário de Minas"). Resultado com rua diferente **nunca** é
-  usado: 44 linhas descartadas por isso.
-
-### Prioridade da coordenada final
-
-| # | Condição | `coord_fonte` | `coord_precisao` | Linhas |
-|---|---|---|---|---|
-| 1 | semáforo com `coord_confere == True` | `semaforo` | alta | 243 |
-| 2 | geocode nível `numero` com bairro conferindo | `endereco_numero` | alta | 257 |
-| 3 | geocode nível `via` com bairro conferindo | `endereco_via` | media | 1.402 |
-| 4 | semáforo com `coord_confere == False` | `semaforo_nao_confere` | baixa | 2 |
-| 5 | geocode sem bairro conferindo (inclui nível `outro`) | `endereco_nao_confere` | baixa | 161 |
-| 6 | nada disso | null | null | 100 |
-
-Em todos os casos geocodificados, a rua precisa conferir. Das 100 linhas sem coordenada, 53
-são endereços que o Nominatim não achou, 43 só tinham resultado com rua diferente e 4 não
-têm endereço. Os endereços que mais falharam (`top20_enderecos_que_falharam` no JSON) são
-`R PRINCESA IZABEL` (9), `R EXP FRANCISCO VITORIANO` (5), `AV DES GUERRA BARRETO` (4),
-`AV CELSO FURTADO VIA MANGUE` (4) e `COR DO BARTOLOMEU` (4). Em geral, são abreviações de
-título no meio do nome (`EXP`, `DES`, `N S`) ou nomes compostos.
-
-### Cobertura antes e depois (execução de 06/11/2026)
-
-| Ano | Atropelamentos | Com coordenada antes (só semáforo) | Com coordenada depois | Precisão alta ou média |
-|---|---|---|---|---|
-| 2015 (jun–dez) | 165 | 0,0% | 95,2% | 86,1% |
-| 2016 | 262 | 0,0% | 95,0% | 88,5% |
-| 2017 | 282 | 0,0% | 96,1% | 84,8% |
-| 2018 | 224 | 5,8% | 95,5% | 84,8% |
-| 2019 | 263 | 23,6% | 97,7% | 90,9% |
-| 2020 | 155 | 30,3% | 91,6% | 85,8% |
-| 2021 | 163 | 28,8% | 96,9% | 92,0% |
-| 2022 | 211 | 26,1% | 97,2% | 92,9% |
-| 2023 | 228 | 7,5% | 93,9% | 86,8% |
-| 2024 | 212 | 4,2% | 93,4% | 86,3% |
-| **Total** | **2.165** | **11,5%** | **95,4%** | **87,8%** |
-
-O JSON de qualidade traz sempre os números atuais (`pct_com_coordenada_antes_geocode_por_ano`,
-`pct_com_coordenada_por_ano`, `pct_precisao_alta_ou_media_por_ano`, `por_coord_fonte`,
-`por_coord_precisao`). Esta tabela é um retrato.
-
-### Limitações
-
-- **Um ponto "via" é o centro aproximado de um trecho da rua, não o local do sinistro.**
-  São 1.402 linhas (65%), e o número digitado, quando existe, raramente é achado: só 257
-  linhas chegam ao nível `numero`.
-- **Vias longas:** mesmo com o bairro conferindo, o trecho devolvido pode estar a centenas de
-  metros, ou mais de 1 km, do ponto real. Exemplos são a Av. Caxangá, a Av. Recife e a Av.
-  Norte, que atravessam vários bairros.
-- **Muitos sinistros no mesmo ponto:** todos os atropelamentos de uma mesma rua e bairro com
-  nível `via` recebem a mesma coordenada. As 2.065 linhas com coordenada ocupam só 970 pontos
-  distintos. Mapas de calor e clusters vão mostrar "pilhas" artificiais nesses pontos.
-- **"Bairro confere" não é prova de acerto.** É só um sinal de plausibilidade: bairros
-  vizinhos e limites diferentes entre CTTU e OSM geram falsos negativos, e uma rua homônima no
-  mesmo bairro geraria um falso positivo. A amostra de conferência existe para medir isso à mão.
-- **O OSM muda.** Repetir as consultas no futuro pode dar outro resultado. O cache, com
-  `consultado_em`, é o que garante que a base é reproduzível.
-- **Atribuição:** qualquer mapa ou material que use estas coordenadas deve citar
-  "Geocodificação © colaboradores do OpenStreetMap, ODbL".
-
-## Cobertura só por semáforo (M1, execução de 05/11/2026)
+## Cobertura encontrada (execução de 05/11/2026)
 
 | Ano | Atropelamentos | Com coordenada | Hora válida |
 |---|---|---|---|
@@ -290,13 +156,13 @@ O JSON de qualidade traz sempre os números atuais (`pct_com_coordenada_antes_ge
 | 2024 | 212 | 4,2% | 100,0% |
 | **Total** | **2.165** | **11,5%** (250) | **90,2%** |
 
-Mantida como registro da M1. A coluna equivalente hoje é
-`pct_com_coordenada_antes_geocode_por_ano` do JSON.
+Os números atuais estão sempre em `atropelamentos_qualidade.json`; esta tabela é um retrato.
 
-Leitura: a coordenada por semáforo cobre pouco e de forma enviesada. Pega só cruzamentos
-semaforizados, e quase nada em 2018, 2023 e 2024, quando `num_semaforo` foi pouco preenchido
-(6%, 8,5% e 3,7% de todos os sinistros). Um mapa feito só com ela mostra **onde há
-semáforo**, não onde há mais atropelamento. Por isso foi feita a geocodificação da M1b.
+Leitura: a coordenada por semáforo cobre pouco e de forma enviesada — só cruzamentos
+semaforizados, e quase nada em 2018, 2023 e 2024, quando `num_semaforo` foi pouco
+preenchido (6%, 8,5% e 3,7% de todos os sinistros). Um mapa de risco feito só com as linhas
+com coordenada mostra **onde há semáforo**, não onde há mais atropelamento. Para cobrir o
+resto, a próxima etapa precisa geocodificar `endereco_norm` + `bairro` (fora do escopo da M1).
 
 ## Ressalvas que se aplicam
 
@@ -332,10 +198,8 @@ semáforo**, não onde há mais atropelamento. Por isso foi feita a geocodifica�
 6. **Hora vazia em todo o CSV de 2022** (2.669 sinistros). `hora`, `datahora` e `faixa_horaria`
    são null nesse ano; qualquer análise por horário usa só os outros anos.
 7. **Ausência de geolocalização** (docs/06 #7) e **sem chave de junção entre bases** (#6): a
-   fonte não traz o ponto exato de nenhum sinistro. A coordenada de semáforo é a do semáforo
-   informado no chamado, com vínculo por número digitado e sujeito a erro (ver
-   `coord_confere`). A coordenada geocodificada é, na maioria dos casos, um trecho da rua
-   (ver "Geocodificação → Limitações"). Filtre por `coord_precisao` conforme a análise.
+   coordenada é do semáforo informado no chamado, não do ponto exato; o vínculo é por número
+   digitado e tem erro (ver `coord_confere`).
 8. **Mudança de formulário** (docs/06 #9): `protocolo` só a partir de 2022; `num_semaforo` só a
    partir de 2018; contagens vazias até 2020 vs. `0` depois; vocabulário de `tipo` muda em
    2018 e 2021. Linhas com lixo no `tipo` (`NATUREZA`, `SANTO AMARO`, `0`...) não são
