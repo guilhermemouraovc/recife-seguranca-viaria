@@ -26,9 +26,23 @@ ou se deve investigar o que substitui a previsão hoje (e por quê ela não exis
   futura — é ajuste ao tráfego do momento. Pergunta que sobra pra entrevista: esse programa
   segue ativo/foi expandido em 2026, e ele influencia (ou poderia influenciar) decisão de nova
   sinalização em outros pontos?
+- Q1.6 *(aberta em 22/10/2026)* — **Velocidade segura.** O PSVR quer readequar limites "de
+  acordo com parâmetros seguros" sem dizer quais (`[C-11]`); a OMS define valores por tipo de
+  conflito (`[C-10]`); a lei municipal teria 50 km/h nas arteriais, mas isso só foi visto na
+  imprensa (`[C-12]`); qual referência a CTTU usa é lacuna (`[C-13]`). Pra entrevista:
+  - Q1.6a Quando a equipe decide o limite de uma via, que referência ou critério técnico usa?
+    (pergunta aberta — não citar a OMS antes da resposta, pra não induzir)
+  - Q1.6b Como fica hoje a relação entre o limite das placas e o que o Plano de Mobilidade
+    prevê por tipo de via? Existe uma classificação viária oficial que dê pra consultar?
+    (verifica `[C-12]` e destrava a comparação limite × velocidade segura nos dados)
+  - Q1.6c O estudo técnico da Iniciativa 4.3 lista "análise e simulação de impacto no
+    trânsito" — como essa análise é feita, ou vai ser feita? (liga com Q1.1: é um caso
+    concreto de avaliação prévia de mudança)
+
+  Respondente provável: SEOPS-CTTU, responsável pela 4.3 (`[C-11]`) — confirmar em Q2.2.
 
 Status: `em pesquisa` — Q1.3 confirmado como uso retrospectivo (`[C-03]`), Q1.5 respondido
-parcialmente (`[C-09]`); Q1.1, Q1.2 e Q1.4 continuam sem resposta pública, precisam da
+parcialmente (`[C-09]`); Q1.1, Q1.2, Q1.4 e Q1.6 continuam sem resposta pública, precisam da
 entrevista (ver `research/findings/D1.md`)
 
 ## D2 — Estrutura de decisão e quem responde o quê

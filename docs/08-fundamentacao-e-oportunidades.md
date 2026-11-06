@@ -49,7 +49,7 @@ olhando o microdado — reforça o argumento de ir além da citação de número
 Recife tem série histórica de monitoramento de velocidade desde 2020, feita pela CTTU com a
 Bloomberg Initiative for Global Road Safety (BIGRS), via Johns Hopkins University e UFC:
 atualmente 43% das motos ainda trafegam acima do limite, e 75% dos veículos em geral acima da
-velocidade considerada segura pela OMS (30–50 km/h) ([Folha
+velocidade considerada segura pela OMS (30–50 km/h — valor por tipo de via na fonte primária, ver `10-velocidade-segura.md`) ([Folha
 PE](https://www.folhape.com.br/noticias/cttu-inicia-pesquisa-de-monitoramento-da-velocidade-media-e-o/446566/);
 [cobertura do estudo
 JHU](https://campinas.sp.gov.br/noticias/114843/quase-metade-dos-motociclistas-excedem-velocidade-aponta-estudo-da-johns-hopkins)).

@@ -59,8 +59,14 @@ def fetch_dataset(slug: str, org_dir: str, force: bool = False) -> list[Path]:
     return downloaded
 
 
-def fetch_sinistros(force: bool = False) -> None:
-    for slug in SINISTROS_SLUGS:
+# Section C -- lat/long of each semaforo; used to geocode sinistros via num_semaforo.
+SEMAFOROS_SLUGS = ["localizacao-dos-semaforos"]
+
+DATASETS = {"sinistros": SINISTROS_SLUGS, "semaforos": SEMAFOROS_SLUGS}
+
+
+def fetch_group(name: str, force: bool = False) -> None:
+    for slug in DATASETS[name]:
         print(f"{slug}:")
         fetch_dataset(slug, org_dir="cttu", force=force)
 
@@ -68,8 +74,6 @@ def fetch_sinistros(force: bool = False) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--force", action="store_true", help="re-download even if unchanged")
-    parser.add_argument("--dataset", choices=["sinistros"], default="sinistros")
+    parser.add_argument("--dataset", choices=list(DATASETS), default="sinistros")
     args = parser.parse_args()
-
-    if args.dataset == "sinistros":
-        fetch_sinistros(force=args.force)
+    fetch_group(args.dataset, force=args.force)

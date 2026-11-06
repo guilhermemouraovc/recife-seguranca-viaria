@@ -19,6 +19,15 @@ pra usar — sem precisar redescobrir nada do zero a cada conversa.
    pandas, pyarrow, pdfplumber). Use `.venv/bin/python`, não o Python do sistema.
 3. Pra rodar a pipeline principal:
    - `scripts/fetch_datasets.py` — baixa os datasets do Portal de Dados Abertos (CKAN).
+   - `scripts/clean_sinistros.py` — limpa os sinistros 2015–2024 em
+     `data/processed/sinistros/` (parquet + README com as ressalvas).
+   - `scripts/geocode_sinistros.py` — adiciona lat/lon via OpenStreetMap (lento: ~1 req/s,
+     com cache; `--offline` só reaplica o cache).
+   - `scripts/load_postgis.sh` — sobe PostGIS no Docker (`compose.yml`, porta 5433), carrega
+     os sinistros com geometria + índice espacial (`sql/01_carga.sql`), calcula clusters e
+     score de risco (`sql/02_risco.sql`) e valida contra os locais de intervenção da CTTU
+     (`sql/03_validacao.sql`, `sql/locais_validacao.csv`). Consulta:
+     `docker compose exec db psql -U postgres`, ex. `SELECT * FROM risco_clusters('2023-01-01')`.
    - `scripts/fetch_pdfs.py` + `scripts/extract_pdfs.py` — baixa e extrai os PDFs
      institucionais (PSVR + Relatórios Anuais).
    - `scripts/build_dashboard_data.py` / `web/` — dashboard exploratório dos dados já
@@ -119,9 +128,13 @@ Estão detalhadas em `CLAUDE.md`, mas as que mais pegam gente de surpresa:
 │   ├── 07-backlog-tarefas.md              # tarefas concretas, em ordem
 │   ├── 08-fundamentacao-e-oportunidades.md # argumento do tema + pesquisa externa citada
 │   ├── 09-contrato-trechos-e-telemetria.md # interface ML ↔ módulo (HTTP e MQTT)
-│   └── 10-plano-mvp-e-materiais.md        # responsáveis, materiais, requisitos da trilha
+│   ├── 10-plano-mvp-e-materiais.md        # responsáveis, materiais, requisitos da trilha
+│   ├── 09-criterios-cruzamento.md         # record linkage CTTU × SAMU × SDS (MVP só dado público)
+│   └── 10-velocidade-segura.md            # OMS × CTB × limite municipal (o que está e não está definido)
 ├── scripts/
 │   ├── ckan_client.py / fetch_datasets.py  # pipeline dos datasets CKAN
+│   ├── clean_sinistros.py / geocode_sinistros.py # limpeza + geocodificação dos sinistros
+│   ├── load_postgis.sh                     # PostGIS + score de risco (usa sql/ e compose.yml)
 │   ├── fetch_pdfs.py / extract_pdfs.py     # pipeline dos PDFs institucionais
 │   ├── extract_adhoc.py                    # extração ad-hoc (skill extract-pdf-adhoc)
 │   ├── manifest.py                         # provenance/idempotência dos downloads
