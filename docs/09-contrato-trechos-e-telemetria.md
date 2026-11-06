@@ -7,6 +7,7 @@ e o campo `versao` deve ser incrementado.
 - Arquivo de exemplo: [`data/contrato/trechos_exemplo.json`](../data/contrato/trechos_exemplo.json)
 - Validador: `python scripts/validar_trechos.py data/contrato/trechos_exemplo.json`
 - Endpoint que entrega o arquivo ao módulo: `GET /modulo/trechos` (pasta `api/`)
+- Arquivo gerado pelo modelo (M4): `data/contrato/trechos.json` (`scripts/load_postgis.sh`)
 - Situação: **proposta**, a fechar entre as trilhas na semana 0 (tarefa O2)
 
 Este documento define as duas interfaces entre as trilhas:
@@ -64,12 +65,19 @@ Este documento define as duas interfaces entre as trilhas:
 | 0,40 a 0,69 | `medio` |
 | ≥ 0,70 | `alto` |
 
-## Velocidade segura (proposta)
+## Velocidade segura
 
-O modelo de ML calcula **risco**, não o limite da via. A regra inicial é:
+O modelo de ML calcula **risco**, não o limite da via. `vel_segura` segue a
+[`docs/13-velocidade-segura.md`](13-velocidade-segura.md) (OMS 2023, Tabela 1):
 
-- `vel_segura` = limite da via (dados de velocidade da CTTU ou tipo de via)
-- se `risco` = `alto`: `vel_segura` = limite − 10 km/h (mínimo de 20 km/h)
+- **30 km/h** quando usuários vulneráveis (pedestre, ciclista, moto) estão em ≥ 25% dos
+  sinistros do trecho;
+- **50 km/h** nos demais trechos.
+
+O limite sinalizado da via não entra. A classificação viária não está em nenhuma base
+baixada, e `velocidade_max_via` só é preenchida em ~25% das linhas (ver docs/13, seção 4).
+O limiar de 25% é um parâmetro de calibração, não um achado. A geração está em
+`sql/04_trechos.sql`.
 
 ## Comportamento esperado do módulo
 
