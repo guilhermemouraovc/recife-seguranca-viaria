@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trechos de risco · Recife</title>
+<!-- M6: painel do MVP. Servido pela API em /painel/ (api/app/main.py); lê /trechos (docs/09). -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+  :root {
+    /* Cores de risco: definidas só aqui e lidas pelo JS (círculo, legenda e ranking).
+       Três matizes distintos (ΔE >= 17,9 inclusive para daltonismo). Amarelo e laranja têm pouco
+       contraste com o mapa claro, por isso todo marcador leva borda escura e o texto do risco. */
+    --risco-alto: #a50f15;
+    --risco-medio: #f07c0e;
+    --risco-baixo: #ffd60a;
+    --risco-borda: #2b2b2b;
+    --fundo: #fcfcfb;
+    --painel: #ffffff;
+    --borda: #dedcd6;
+    --texto: #1f1e1c;
+    --texto-2: #57554f;
+    --foco: #1c5cab;
+    --aviso-fundo: #fff4d6;
+    --aviso-borda: #c99a1e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--texto); background: var(--fundo);
+    display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden;
+  }
+  header {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.5rem;
+    padding: .75rem 1rem; border-bottom: 1px solid var(--borda); background: var(--painel);
+  }
+  header h1 { font-size: 1.1rem; margin: 0; }
+  header .meta { color: var(--texto-2); font-size: .85rem; overflow-wrap: anywhere; }
+  .filtro { margin-left: auto; display: flex; align-items: center; gap: .5rem; }
+  .filtro select { font: inherit; padding: .3rem .5rem; border: 1px solid var(--borda); border-radius: 6px; background: #fff; }
+  #aviso {
+    padding: .6rem 1rem; background: var(--aviso-fundo); border-bottom: 2px solid var(--aviso-borda);
+    font-weight: 600;
+  }
+  #aviso[hidden] { display: none; }
+  main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 480px; }
+  #mapa { min-height: 420px; }
+  aside {
+    border-left: 1px solid var(--borda); background: var(--painel);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  aside h2 { font-size: .95rem; margin: 0; padding: .75rem 1rem .25rem; }
+  aside .contagem { color: var(--texto-2); font-size: .85rem; padding: 0 1rem .5rem; margin: 0; }
+  #ranking { list-style: none; margin: 0; padding: 0 .5rem .5rem; overflow-y: auto; flex: 1; }
+  #ranking button {
+    width: 100%; display: grid; grid-template-columns: 2rem 1fr auto; align-items: center; gap: .5rem;
+    padding: .5rem; border: 0; border-radius: 6px; background: none; font: inherit; color: inherit;
+    text-align: left; cursor: pointer;
+  }
+  #ranking button:hover { background: #f3f2ee; }
+  #ranking button:focus-visible, select:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+  #ranking .pos { color: var(--texto-2); font-variant-numeric: tabular-nums; }
+  #ranking .nome { font-weight: 600; overflow-wrap: anywhere; }
+  #ranking .detalhe { display: flex; gap: .3rem; margin-top: .1rem; font-weight: 400; color: var(--texto-2); font-size: .8rem; }
+  #ranking .score { font-variant-numeric: tabular-nums; color: var(--texto-2); }
+  .chip { display: inline-flex; align-items: center; gap: .3rem; }
+  .bolinha { width: .75rem; height: .75rem; border-radius: 50%; display: inline-block; flex: none;
+             border: 1.5px solid var(--risco-borda); }
+  .vazio { padding: .5rem 1rem; color: var(--texto-2); }
+  .legenda { background: #fff; padding: .5rem .7rem; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.25);
+             font-size: .85rem; line-height: 1.6; }
+  .legenda strong { display: block; margin-bottom: .1rem; }
+  .legenda .chip { display: flex; }
+  .popup h3 { margin: 0 0 .3rem; font-size: 1rem; }
+  .popup dl { display: grid; grid-template-columns: auto 1fr; gap: .1rem .6rem; margin: 0; }
+  .popup dt { color: var(--texto-2); }
+  .popup dd { margin: 0; }
+  .popup .id { margin: .4rem 0 0; color: var(--texto-2); font-size: .75rem; }
+  footer {
+    padding: .6rem 1rem; border-top: 1px solid var(--borda); background: var(--painel);
+    font-size: .8rem; color: var(--texto-2);
+  }
+  footer ul { margin: 0; padding-left: 1.1rem; }
+
+  @media (max-width: 760px) {
+    main { grid-template-columns: minmax(0, 1fr); }
+    #mapa { height: 60vh; min-height: 320px; }
+    aside { border-left: 0; border-top: 1px solid var(--borda); }
+    #ranking { overflow: visible; }
+    .filtro { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Trechos de risco de atropelamento · Recife</h1>
+    <div class="meta" id="meta" aria-live="polite">Carregando…</div>
+  </div>
+  <div class="filtro">
+    <label for="hora">Horário</label>
+    <select id="hora">
+      <option value="">Dia todo</option>
+    </select>
+  </div>
+</header>
+<div id="aviso" role="alert" hidden>
+  Atenção: a API está servindo <strong>dados de exemplo</strong> (trechos inventados para teste),
+  não o resultado do modelo. Gere data/contrato/trechos.json com scripts/load_postgis.sh.
+</div>
+<main>
+  <div id="mapa" role="region" aria-label="Mapa dos trechos de risco"></div>
+  <aside aria-labelledby="titulo-ranking">
+    <h2 id="titulo-ranking">Ranking por score</h2>
+    <p class="contagem" id="contagem" aria-live="polite"></p>
+    <ol id="ranking"></ol>
+  </aside>
+</main>
+<footer>
+  <ul>
+    <li>Dados de chamados da CTTU (Dados Abertos Recife), não os números oficiais do PSVR.</li>
+    <li>Coordenadas aproximadas: centro de um trecho de rua, não o ponto exato dos sinistros.</li>
+    <li>O risco é calculado a partir da recorrência histórica de sinistros, não é uma medida oficial.</li>
+  </ul>
+</footer>
+
+<script>
+const ROTULO = { baixo: "baixo", medio: "médio", alto: "alto" };
+const css = getComputedStyle(document.documentElement);
+const COR = Object.fromEntries(["alto", "medio", "baixo"].map(r => [r, css.getPropertyValue(`--risco-${r}`).trim()]));
+const BORDA = css.getPropertyValue("--risco-borda").trim();
+
+const mapa = L.map("mapa", { zoomControl: true }).setView([-8.05, -34.92], 12);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">colaboradores do OpenStreetMap</a>'
+}).addTo(mapa);
+mapa.attributionControl.addAttribution("Geocodificação © colaboradores do OpenStreetMap, ODbL");
+mapa.attributionControl.addAttribution("Fonte: chamados CTTU / Dados Abertos Recife");
+
+const legenda = L.control({ position: "bottomleft" });
+legenda.onAdd = () => {
+  const div = L.DomUtil.create("div", "legenda");
+  div.innerHTML = "<strong>Risco</strong>" + ["alto", "medio", "baixo"].map(r =>
+    `<span class="chip"><span class="bolinha" style="background:${COR[r]}"></span>${ROTULO[r]}</span>`).join("");
+  return div;
+};
+legenda.addTo(mapa);
+
+const camada = L.layerGroup().addTo(mapa);
+const circulos = new Map();
+let primeiraCarga = true;
+
+const seletor = document.getElementById("hora");
+for (let h = 0; h < 24; h++) seletor.add(new Option(`${h}h`, h));
+seletor.addEventListener("change", () => carregar(seletor.value));
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// [6,7,...,11,18,...,23] -> "6h–12h, 18h–24h"; [] -> "dia todo".
+function faixas(horas) {
+  if (!horas.length) return "dia todo";
+  const hs = [...horas].sort((a, b) => a - b);
+  const out = [];
+  let ini = hs[0], ant = hs[0];
+  for (const h of hs.slice(1).concat([null])) {
+    if (h === ant + 1) { ant = h; continue; }
+    out.push(`${ini}h–${ant + 1}h`);
+    ini = ant = h;
+  }
+  return hs.length === 24 ? "dia todo (0h–24h)" : out.join(", ");
+}
+
+// Nome exibido: o id só entra quando dois trechos têm o mesmo nome (ex.: "AV X · c7").
+function rotulos(trechos) {
+  const n = {};
+  for (const t of trechos) n[t.nome] = (n[t.nome] || 0) + 1;
+  return new Map(trechos.map(t => [t.id, n[t.nome] > 1 ? `${t.nome} · ${t.id}` : t.nome]));
+}
+
+function popup(t, nome) {
+  return `<div class="popup"><h3>${esc(nome)}</h3><dl>
+    <dt>Risco</dt><dd><span class="chip"><span class="bolinha" style="background:${COR[t.risco]}"></span>${ROTULO[t.risco]}</span></dd>
+    <dt>Score</dt><dd>${t.score.toFixed(3)}</dd>
+    <dt>Horários de risco</dt><dd>${faixas(t.horas)}</dd>
+    <dt>Velocidade segura</dt><dd>${t.vel_segura} km/h</dd>
+    <dt>Raio</dt><dd>${t.raio_m} m</dd>
+  </dl><p class="id">id ${esc(t.id)}</p></div>`;
+}
+
+function focar(id) {
+  const c = circulos.get(id);
+  if (!c) return;
+  mapa.setView(c.getLatLng(), Math.max(mapa.getZoom(), 15));
+  c.openPopup();
+}
+
+function render(dados, hora) {
+  document.getElementById("aviso").hidden = dados.aviso !== "dados de exemplo";
+  document.getElementById("meta").textContent =
+    `Fonte: ${dados.fonte} · gerado em ${new Date(dados.gerado_em).toLocaleString("pt-BR")}`;
+
+  camada.clearLayers();
+  circulos.clear();
+  const ordem = [...dados.trechos].sort((a, b) => b.score - a.score);
+  const nome = rotulos(ordem);
+  for (const t of ordem) {
+    const c = L.circle([t.lat, t.lon], {
+      radius: t.raio_m, color: BORDA, weight: 2, fillColor: COR[t.risco], fillOpacity: 0.75
+    }).bindPopup(popup(t, nome.get(t.id))).bindTooltip(esc(nome.get(t.id)));
+    c.addTo(camada);
+    circulos.set(t.id, c);
+  }
+
+  const quando = hora === "" ? "no dia todo" : `às ${hora}h`;
+  document.getElementById("contagem").textContent =
+    `${ordem.length} trecho${ordem.length === 1 ? "" : "s"} de risco ${quando}`;
+  const lista = document.getElementById("ranking");
+  lista.innerHTML = ordem.length ? ordem.map((t, i) => `
+    <li><button type="button" data-id="${esc(t.id)}" aria-label="${esc(nome.get(t.id))}, risco ${ROTULO[t.risco]}, score ${t.score.toFixed(2)}">
+      <span class="pos">${i + 1}</span>
+      <span class="nome">${esc(nome.get(t.id))}
+        <span class="detalhe chip"><span class="bolinha" style="background:${COR[t.risco]}"></span>${ROTULO[t.risco]} · ${faixas(t.horas)}</span>
+      </span>
+      <span class="score">${t.score.toFixed(2)}</span>
+    </button></li>`).join("")
+    : `<li class="vazio">Nenhum trecho de risco neste horário.</li>`;
+
+  if (primeiraCarga && ordem.length) {
+    mapa.fitBounds(L.featureGroup([...circulos.values()]).getBounds(), { padding: [30, 30] });
+    primeiraCarga = false;
+  }
+}
+
+document.getElementById("ranking").addEventListener("click", e => {
+  const b = e.target.closest("button[data-id]");
+  if (b) focar(b.dataset.id);
+});
+
+async function carregar(hora) {
+  const url = hora === "" ? "/trechos" : `/trechos?hora=${encodeURIComponent(hora)}`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    render(await r.json(), hora);
+  } catch (err) {
+    document.getElementById("meta").textContent = `Erro ao carregar ${url}: ${err.message}. A API está rodando?`;
+    console.error(err);
+  }
+}
+
+carregar("");
+</script>
+</body>
+</html>
