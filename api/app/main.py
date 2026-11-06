@@ -88,3 +88,8 @@ def modulo_trechos():
         "gerado_em": dados["gerado_em"],
         "trechos": [{k: v for k, v in t.items() if k != "nome"} for t in dados["trechos"]],
     }
+
+
+# M6: painel com mapa (painel/index.html), mesma origem que /trechos. Montado por último para
+# não sombrear as rotas acima.
+app.mount("/painel", StaticFiles(directory=ROOT / "painel", html=True), name="painel")

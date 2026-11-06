@@ -114,3 +114,11 @@ def test_arquivo_real_e_valido():
     dados, aviso = main.carregar()
     assert aviso is None
     assert dados["trechos"]
+
+
+def test_painel_servido(client):
+    r = client.get("/painel/")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    assert "leaflet@1.9.4" in r.text
+    assert 'fetch(url)' in r.text and '"/trechos"' in r.text
