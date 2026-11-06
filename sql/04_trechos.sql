@@ -8,6 +8,9 @@
 -- Trecho de risco = top 10% of clusters, the same cut sql/03_validacao.sql validates.
 --
 -- id       'c<posicao>' (position by score; ties broken by cluster_id so ids stay unique).
+-- nome     '<endereço mais frequente> · <bairro mais frequente>' do cluster, até 60 caracteres
+--          (contrato). Se passar, corta o endereço e mantém o bairro inteiro. O bairro diferencia
+--          trechos da mesma via (ex.: dois clusters na Av. Agamenon Magalhães).
 -- score    cluster score / highest exported score (0-1). risco = contract bands
 --          (< 0.40 baixo, 0.40-0.69 medio, >= 0.70 alto).
 -- horas    every hour 0-23 of the horario bands (00-06, 06-12, 12-18, 18-24) holding >= 25% of
@@ -41,10 +44,15 @@ WITH cfg AS (
 ), top AS (
     SELECT * FROM risco WHERE posicao <= 0.1 * n_clusters AND pos <= 200  -- contract: max 200 trechos
 ), membros AS (
-    SELECT c.cluster_id, c.hora, s.usuario_vulneravel
+    SELECT c.cluster_id, c.hora, s.usuario_vulneravel, s.bairro
     FROM cfg, sinistros_clusterizados('2025-01-01', cfg.eps_m, cfg.min_pts, cfg.apenas) c
     JOIN sinistros s USING (id)
     WHERE c.cluster_id IN (SELECT cluster_id FROM top)
+), bairro AS (
+    SELECT DISTINCT ON (cluster_id) cluster_id, bairro
+    FROM membros WHERE nullif(trim(bairro), '') IS NOT NULL
+    GROUP BY cluster_id, bairro
+    ORDER BY cluster_id, count(*) DESC, bairro
 ), vuln AS (
     SELECT cluster_id, avg((usuario_vulneravel <> 'nenhum')::int) AS pct FROM membros GROUP BY 1
 ), faixas AS (
@@ -59,7 +67,9 @@ WITH cfg AS (
 ), trechos AS (
     SELECT t.pos,
            'c' || t.pos AS id,
-           left(coalesce(nullif(split_part(t.enderecos, ' | ', 1), ''), 'Trecho c' || t.pos), 60) AS nome,
+           CASE WHEN b.bairro IS NULL THEN left(e.endereco, 60)
+                ELSE left(e.endereco, greatest(0, 60 - length(' · ' || b.bairro))) || ' · ' || b.bairro
+           END AS nome,
            round(ST_Y(ST_Transform(ST_Centroid(t.area), 4326))::numeric, 5) AS lat,
            round(ST_X(ST_Transform(ST_Centroid(t.area), 4326))::numeric, 5) AS lon,
            least(500, greatest(200, round(ST_MaxDistance(ST_Centroid(t.area), t.area))))::int AS raio_m,
@@ -67,6 +77,9 @@ WITH cfg AS (
            coalesce(h.horas, '[]'::json) AS horas,
            CASE WHEN v.pct >= 0.25 THEN 30 ELSE 50 END AS vel_segura
     FROM top t
+    CROSS JOIN LATERAL (SELECT coalesce(nullif(split_part(t.enderecos, ' | ', 1), ''), 'Trecho c' || t.pos)
+                        AS endereco) e
+    LEFT JOIN bairro b USING (cluster_id)
     JOIN vuln v USING (cluster_id)
     LEFT JOIN horas h USING (cluster_id)
 )
