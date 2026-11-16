@@ -1,0 +1,38 @@
+# Trilha de AM (ARCHITECTURE.md, seção 12). Antes do primeiro uso: cp .env.example .env
+# Nesta rodada: postgres + tooling. Mosquitto, MLflow, Airflow, API e dashboard entram depois.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-viario}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env (cp .env.example .env)}
+      POSTGRES_DB: ${POSTGRES_DB:-viario}
+    ports: ["${POSTGRES_PORT:-5433}:5432"]
+    volumes:
+      # Volume nomeado, não bind mount: o Postgres exige dono e permissão 0700 no diretório
+      # de dados, o que um bind mount em NTFS (Windows) não garante.
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # -h 127.0.0.1: the init-time temp server is socket-only, so this waits for the real one
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "${POSTGRES_USER:-viario}", "-d", "${POSTGRES_DB:-viario}"]
+      interval: 2s
+      retries: 30
+
+  # Ingestão, preparo e testes, sob demanda: docker compose run --rm tooling <comando>
+  # O profile evita que `docker compose up` suba este serviço sem comando.
+  tooling:
+    build:
+      context: .
+      dockerfile: docker/python/Dockerfile
+    profiles: ["tooling"]
+    # UID do host (Linux) para os arquivos gravados em ./data não ficarem de root; GID 0 como no Airflow.
+    user: "${AIRFLOW_UID:-50000}:0"
+    volumes:
+      # Só o que a trilha de AM usa: legado/ fica fora do container e não pode ser importado.
+      # Tudo roda via `python -m`, sem depender de bit de execução (que NTFS não tem).
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+      - ./data:/app/data
+
+volumes:
+  pgdata:

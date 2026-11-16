@@ -1,18 +1,32 @@
+# Dados: só a estrutura e o manifesto vão para o git
 data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
-data/adhoc/*
-!data/adhoc/.gitkeep
+
+# Python
 __pycache__/
 *.pyc
-.env
 .venv/
-.DS_Store
+.pytest_cache/
 
-# MVP: firmware e painel
+# Credenciais (copie .env.example para .env)
+.env
+secrets.h
+
+# Configuração local de agentes de IA (não sobe no commit)
+CLAUDE.md
+.claude/
+.serena/
+.agents/
+.codex/
+.cursor/
+.goose/
+.grok/
+.kimi-code/
+.omp/
+
+# Embarcado (PlatformIO) e editor
 .pio/
 .vscode/
-node_modules/
-dist/
-firmware/**/secrets.h
+.DS_Store

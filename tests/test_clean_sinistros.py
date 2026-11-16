@@ -1,12 +1,7 @@
-"""Tests for scripts/clean_sinistros.py (no files, no network)."""
-import sys
-from pathlib import Path
-
+"""Tests for src/preparo/clean_sinistros.py (no files, no network)."""
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-
-from clean_sinistros import clean, criterio_atropelamento  # noqa: E402
+from src.preparo.clean_sinistros import clean, criterio_atropelamento, normalizar_schema
 
 
 def test_criterio_atropelamento():
@@ -40,3 +35,27 @@ def test_clean_nao_muda_flag_atropelamento():
     ]))
     assert out["atropelamento"].tolist() == [True, False, False]
     assert out["criterio_atropelamento"].tolist() == ["tipo+pedestre", "pedestre", None]
+
+
+def test_normalizar_schema():
+    raw, colunas_por_ano = normalizar_schema({
+        2018: pd.DataFrame({"DATA": ["2018-01-01"], "Endereço Cruzamento ": ["RUA A"], "tipo": ["COLISÃO"],
+                            "natureza_acidente": ["COM VÍTIMA"]}),
+        2015: pd.DataFrame({"data": ["2015-06-01"], "tipo": ["SEM VÍTIMA"], "natureza": ["COLISÃO"]}),
+    })
+    assert colunas_por_ano == {2015: ["data", "tipo", "natureza"],
+                               2018: ["DATA", "Endereço Cruzamento ", "tipo", "natureza_acidente"]}
+    assert raw["data"].tolist() == ["2015-06-01", "2018-01-01"]
+    assert raw["endereco_cruzamento"].isna().tolist() == [True, False]
+    assert raw["gravidade"].tolist() == ["SEM VÍTIMA", "COM VÍTIMA"]
+    assert raw["tipo_acidente"].tolist() == ["COLISÃO", "COLISÃO"]
+
+
+def test_acidente_verificado_nao_filtra():
+    raw = _raw([
+        ("2017-01-01", "10:00:00", "COM VÍTIMA", "COLISÃO", "PINA", "AV X", "", "0"),
+        ("2018-01-01", "10:00:00", "COM VÍTIMA", "COLISÃO", "PINA", "AV X", "", "0"),
+    ])
+    raw["acidente_verificado"] = [float("nan"), "Longo da via"]
+    out = clean(raw)
+    assert out["acidente_verificado"].tolist() == ["DESCONHECIDO", "Longo da via"]
