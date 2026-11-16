@@ -91,6 +91,14 @@ services:
     profiles: ["tooling"]
     # UID do host (Linux) para os arquivos gravados em ./data não ficarem de root; GID 0 como no Airflow.
     user: "${AIRFLOW_UID:-50000}:0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Lidas por src/comum/db.py para gravar dim_local e features.
+      POSTGRES_USER: ${POSTGRES_USER:-viario}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-viario}
     volumes:
       # Só o que a trilha de AM usa: legado/ fica fora do container e não pode ser importado.
       # Tudo roda via `python -m`, sem depender de bit de execução (que NTFS não tem).

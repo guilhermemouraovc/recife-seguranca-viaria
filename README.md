@@ -27,14 +27,18 @@ O que existe e roda hoje:
 - **Preparo** (`src/preparo/clean_sinistros.py`): unifica o esquema dos 10 anos
   (`normalizar_schema`), remove duplicados exatos, padroniza tipos e texto e grava um Parquet
   único com as ressalvas da fonte documentadas.
+- **Local e features** (`src/preparo/local_id.py`, `src/preparo/features.py`): identifica cada
+  local por bairro + logradouro normalizados (`local_id`), grava a tabela `dim_local` e monta a
+  tabela `features` (local × trimestre, com o alvo do trimestre seguinte) no Postgres e em
+  Parquet. Um teste garante que nenhuma feature usa dado do futuro.
 - **Docker**: PostgreSQL 16, broker MQTT (Mosquitto, com usuário e senha) e servidor MLflow
   (backend no Postgres, artefatos em volume), todos com healthcheck; JupyterLab no profile
   `dev`; e um serviço `tooling` para rodar ingestão, preparo e testes. Nada depende de Python
   instalado no host.
 
 O que ainda não existe e entra nas próximas etapas, nesta ordem (`ARCHITECTURE.md`, seção
-16): `local_id` e features, notebooks de EDA, modelagem com MLflow, DAGs do Airflow,
-simulador embarcado e ingestor MQTT, API FastAPI e dashboard Streamlit.
+16): notebooks de EDA, modelagem com MLflow, DAGs do Airflow, simulador embarcado e ingestor
+MQTT (com as features de telemetria), API FastAPI e dashboard Streamlit.
 
 ## Como executar
 
@@ -59,6 +63,8 @@ docker compose up                                              # sobe postgres, 
 docker compose --profile dev up jupyter                        # notebooks em http://localhost:8888 (token = JUPYTER_TOKEN)
 docker compose run --rm tooling python -m src.ingestao.fetch_datasets   # baixa os 10 CSVs
 docker compose run --rm tooling python -m src.preparo.clean_sinistros   # gera o Parquet limpo
+docker compose run --rm tooling python -m src.preparo.local_id          # local_id e dim_local (Postgres + Parquet)
+docker compose run --rm tooling python -m src.preparo.features          # tabela features (Postgres + Parquet)
 docker compose run --rm tooling pytest                         # roda os testes
 docker compose down -v                                         # derruba tudo e apaga os volumes
 ```
@@ -97,6 +103,10 @@ Dentro da rede do compose, os serviços se acham pelo nome: `postgres:5432`, `mo
 | `data/processed/sinistros/sinistros_2015_2024.parquet` | uma linha por chamado de sinistro, esquema unificado | não |
 | `data/processed/sinistros/colunas_por_ano.json` | colunas encontradas em cada CSV anual | não |
 | `data/processed/sinistros/README.md` | ressalvas da fonte, contagens por ano e duplicados removidos | não |
+| `data/processed/acidentes_local.parquet` | acidentes que contam (sem `CANCELADA`/`DUPLICIDADE`), com `local_id` e `trimestre` | não |
+| `data/processed/dim_local.parquet` e tabela `dim_local` | um local por linha: `local_id`, bairro e logradouro legíveis | não |
+| `data/processed/local_id_resumo.json` | exclusões, nº de locais e distribuição de acidentes por local | não |
+| `data/processed/features.parquet` e tabela `features` | local × trimestre (locais com ≥ 3 acidentes), features e alvo `y` | não |
 
 ### Ressalvas da fonte que já estão tratadas
 
@@ -117,7 +127,7 @@ A lista completa sai no README gerado em `data/processed/sinistros/`.
 ├── ARCHITECTURE.md          # desenho da solução de AM (fonte da verdade)
 ├── docker-compose.yml       # postgres, mosquitto, mlflow, jupyter (dev) e tooling
 ├── .env.example             # variáveis do compose (copie para .env)
-├── requirements.txt         # dependências Python (ARCHITECTURE.md, seção 14)
+├── requirements.txt         # dependências Python com versões travadas (ARCHITECTURE.md, seção 14)
 ├── docker/
 │   ├── python/              # Dockerfile do tooling
 │   ├── mlflow/              # Dockerfile do tracking server
@@ -127,7 +137,8 @@ A lista completa sai no README gerado em `data/processed/sinistros/`.
 ├── notebooks/               # notebooks de EDA e features (etapa 4)
 ├── src/
 │   ├── ingestao/            # ckan_client, manifest, fetch_datasets
-│   └── preparo/             # clean_sinistros (normalizar_schema + limpeza)
+│   ├── preparo/             # clean_sinistros, local_id, features
+│   └── comum/               # conexão com o Postgres
 ├── tests/                   # pytest
 ├── embedded/esp32/          # README do módulo ESP32 (payload MQTT com local_id)
 ├── data/                    # raw/ e processed/ fora do git; manifest.jsonl versionado

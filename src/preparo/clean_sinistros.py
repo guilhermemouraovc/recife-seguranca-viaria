@@ -111,9 +111,11 @@ def clean(raw: pd.DataFrame) -> pd.DataFrame:
         out[col] = out[col].str.replace(r",0$", "", regex=True).replace("0", pd.NA)
     out["num_semaforo"] = _to_int(raw["num_semaforo"]).replace(0, pd.NA) if "num_semaforo" in raw else pd.NA
 
-    # A column missing in a year (e.g. vitimasfatais in 2015) stays NA -- unknown, not zero.
+    # Up to 2020 the source leaves the cell empty when the count is zero (no "0" is ever written
+    # in those years); from 2021 zeros are explicit. So an empty cell is 0. Only a column missing
+    # in a year (e.g. vitimasfatais in 2015) stays NA -- unknown, not zero.
     for col in COUNT_COLS:
-        out[col] = _to_int(raw[col]) if col in raw else pd.Series(pd.NA, index=raw.index, dtype="Int64")
+        out[col] = _to_int(raw[col].replace("", "0")) if col in raw else pd.Series(pd.NA, index=raw.index, dtype="Int64")
     for col in CONTEXT_COLS:
         out[col] = raw[col].replace("", pd.NA) if col in raw else pd.NA
     # Exists only from 2018 on: filtering by it would drop 2015-2017, so it is a category instead.
@@ -183,6 +185,9 @@ Gerado por `src/preparo/clean_sinistros.py` a partir de `data/raw/cttu/acidentes
 14. **`acidente_verificado` só existe de 2018 em diante.** Não é usada como filtro (isso descartaria
     2015–2017); é categórica, com `DESCONHECIDO` onde não existe ou está vazia.
 15. `endereco_cruzamento`, `numero_cruzamento` e `referencia_cruzamento` só existem de 2016 a 2019.
+16. **Até 2020 a fonte deixa vazia a célula de contagem que vale zero** (`auto`, `moto`, `pedestre`,
+    `vitimasfatais`...): nesses anos nenhum "0" é escrito. A partir de 2021 os zeros vêm explícitos.
+    Aqui, célula vazia vira 0; só a coluna que não existe no ano (`vitimasfatais` em 2015) fica NA.
 
 ## Normalização aplicada
 

@@ -59,3 +59,9 @@ def test_acidente_verificado_nao_filtra():
     raw["acidente_verificado"] = [float("nan"), "Longo da via"]
     out = clean(raw)
     assert out["acidente_verificado"].tolist() == ["DESCONHECIDO", "Longo da via"]
+
+
+def test_contagem_vazia_e_zero_e_coluna_ausente_e_nula():
+    out = clean(_raw([("2019-01-01", "10:00:00", "COM VÍTIMA", "COLISÃO", "PINA", "AV X", "", "")]))
+    assert out.loc[0, "pedestre"] == 0  # empty cell in a column that exists that year
+    assert pd.isna(out.loc[0, "moto"])  # column missing that year
