@@ -5,3 +5,5 @@ Dockerfile          text eol=lf
 docker-compose.yml  text eol=lf
 .env.example        text eol=lf
 requirements.txt    text eol=lf
+*.conf              text eol=lf
+*.sql               text eol=lf

@@ -27,12 +27,14 @@ O que existe e roda hoje:
 - **Preparo** (`src/preparo/clean_sinistros.py`): unifica o esquema dos 10 anos
   (`normalizar_schema`), remove duplicados exatos, padroniza tipos e texto e grava um Parquet
   único com as ressalvas da fonte documentadas.
-- **Docker**: PostgreSQL 16 com healthcheck e um serviço `tooling` para rodar ingestão,
-  preparo e testes. Nada depende de Python instalado no host.
+- **Docker**: PostgreSQL 16, broker MQTT (Mosquitto, com usuário e senha) e servidor MLflow
+  (backend no Postgres, artefatos em volume), todos com healthcheck; JupyterLab no profile
+  `dev`; e um serviço `tooling` para rodar ingestão, preparo e testes. Nada depende de Python
+  instalado no host.
 
-O que ainda não existe e entra nas próximas rodadas, nesta ordem (`ARCHITECTURE.md`, seção
+O que ainda não existe e entra nas próximas etapas, nesta ordem (`ARCHITECTURE.md`, seção
 16): `local_id` e features, notebooks de EDA, modelagem com MLflow, DAGs do Airflow,
-simulador embarcado e MQTT, API FastAPI e dashboard Streamlit.
+simulador embarcado e ingestor MQTT, API FastAPI e dashboard Streamlit.
 
 ## Como executar
 
@@ -45,23 +47,30 @@ Python, venv nem nenhuma biblioteca no host.
 cp .env.example .env              # PowerShell: Copy-Item .env.example .env
 ```
 
-Troque `POSTGRES_PASSWORD`. No Linux, ponha em `AIRFLOW_UID` a saída de `id -u`, para os
-arquivos gravados em `data/` ficarem com o seu usuário. No Windows e no macOS, deixe `50000`.
+Troque `POSTGRES_PASSWORD`, `MQTT_PASSWORD` e `JUPYTER_TOKEN`. A senha do Postgres entra na
+URI do MLflow, então evite `@ : / ? # %` nela. No Linux, ponha em `AIRFLOW_UID` a saída de
+`id -u`, para os arquivos gravados em `data/` e `notebooks/` ficarem com o seu usuário. No
+Windows e no macOS, deixe `50000`.
 
 **2. Rode:**
 
 ```bash
-docker compose up                                              # sobe o PostgreSQL (fica em primeiro plano; -d para segundo plano)
+docker compose up                                              # sobe postgres, mosquitto e mlflow (primeiro plano; -d para segundo plano)
+docker compose --profile dev up jupyter                        # notebooks em http://localhost:8888 (token = JUPYTER_TOKEN)
 docker compose run --rm tooling python -m src.ingestao.fetch_datasets   # baixa os 10 CSVs
 docker compose run --rm tooling python -m src.preparo.clean_sinistros   # gera o Parquet limpo
 docker compose run --rm tooling pytest                         # roda os testes
-docker compose down -v                                         # derruba tudo e apaga o volume do banco
+docker compose down -v                                         # derruba tudo e apaga os volumes
 ```
 
-Na primeira vez, o `docker compose run` monta a imagem do `tooling` a partir do
-`requirements.txt`, o que leva alguns minutos. Depois de mudar o `requirements.txt`, rode
-`docker compose build tooling`. Mudanças em `src/` e `tests/` não exigem rebuild, porque
-entram no container por bind mount.
+Na primeira vez, o `docker compose up` e o `docker compose run` montam as imagens a partir do
+`requirements.txt`, o que leva alguns minutos; as imagens Python compartilham a camada das
+dependências, então ela é instalada uma vez só. Depois de mudar o `requirements.txt`, rode
+`docker compose build`. Mudanças em `src/`, `tests/` e `notebooks/` não exigem rebuild, porque
+entram nos containers por bind mount.
+
+O banco `mlflow` é criado só quando o volume `pgdata` nasce. Se você já tinha subido o
+Postgres antes desta versão, rode `docker compose down -v` uma vez.
 
 O `fetch_datasets` aceita `--force` para baixar de novo mesmo o que não mudou.
 
@@ -69,8 +78,15 @@ O `fetch_datasets` aceita `--force` para baixar de novo mesmo o que não mudou.
 
 | Serviço | Imagem | Porta no host | Papel |
 |---|---|---|---|
-| `postgres` | `postgres:16` | `5433` (`POSTGRES_PORT`) | banco da solução; dados no volume nomeado `pgdata` |
+| `postgres` | `postgres:16` | `5433` (`POSTGRES_PORT`) | bancos `viario` (dados da solução) e `mlflow`; volume nomeado `pgdata` |
+| `mosquitto` | `eclipse-mosquitto:2` | `1883` (`MQTT_PORT`) | broker MQTT; login com `MQTT_USER`/`MQTT_PASSWORD`, sem acesso anônimo |
+| `mlflow` | `docker/mlflow/Dockerfile` | `5000` (`MLFLOW_PORT`) | tracking server e Model Registry; artefatos no volume nomeado `mlflow_artifacts` |
+| `jupyter` | `docker/jupyter/Dockerfile` | `8888` (`JUPYTER_PORT`) | JupyterLab para `notebooks/` (profile `dev`, não sobe no `up`) |
 | `tooling` | `docker/python/Dockerfile` | nenhuma | ingestão, preparo e testes via `docker compose run --rm` (profile `tooling`, não sobe no `up`) |
+
+Dentro da rede do compose, os serviços se acham pelo nome: `postgres:5432`, `mosquitto:1883`,
+`http://mlflow:5000`. No macOS, a porta 5000 costuma estar ocupada pelo AirPlay: troque
+`MLFLOW_PORT` para `5001`.
 
 ### O que cada etapa gera
 
@@ -99,10 +115,16 @@ A lista completa sai no README gerado em `data/processed/sinistros/`.
 ```
 .
 ├── ARCHITECTURE.md          # desenho da solução de AM (fonte da verdade)
-├── docker-compose.yml       # postgres + tooling
+├── docker-compose.yml       # postgres, mosquitto, mlflow, jupyter (dev) e tooling
 ├── .env.example             # variáveis do compose (copie para .env)
 ├── requirements.txt         # dependências Python (ARCHITECTURE.md, seção 14)
-├── docker/python/Dockerfile # imagem Python do tooling
+├── docker/
+│   ├── python/              # Dockerfile do tooling
+│   ├── mlflow/              # Dockerfile do tracking server
+│   ├── jupyter/             # Dockerfile do JupyterLab
+│   ├── mosquitto/           # mosquitto.conf (sem acesso anônimo)
+│   └── postgres/init/       # cria o banco do MLflow na primeira subida
+├── notebooks/               # notebooks de EDA e features (etapa 4)
 ├── src/
 │   ├── ingestao/            # ckan_client, manifest, fetch_datasets
 │   └── preparo/             # clean_sinistros (normalizar_schema + limpeza)
