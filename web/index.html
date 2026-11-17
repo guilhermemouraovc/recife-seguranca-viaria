@@ -28,9 +28,9 @@
     <ul id="caveatsList"></ul>
   </div>
 
+<script src="data.js"></script>
 <script>
-fetch("data.json")
-  .then(r => r.json())
+(window.DATA ? Promise.resolve(window.DATA) : fetch("data.json").then(r => r.json()))
   .then(render)
   .catch(err => {
     document.getElementById("meta").textContent =
