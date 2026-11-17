@@ -238,6 +238,74 @@ semáforo**, não onde há mais sinistro.
 - **Atribuição:** qualquer mapa ou material que use estas coordenadas deve citar
   "Geocodificação © colaboradores do OpenStreetMap, ODbL".
 
+## Validação do M4 e configuração escolhida
+
+`sql/03_validacao.sql` testa se cada local de intervenção da CTTU (`sql/locais_validacao.csv`)
+já seria um trecho de alto risco **usando só os sinistros anteriores à data da intervenção**.
+Um local passa quando o cluster de maior score a até 500 m dele está no top 10% dos clusters.
+DBSCAN com `eps` de 100 m em todas as configurações. Execução de 06/11/2026, com o cache de
+geocode da seção "Cobertura".
+
+| Configuração | Local | Intervenção | Posição | Clusters | Top % | Sinistros no cluster | Distância | Passa |
+|---|---|---|---|---|---|---|---|---|
+| todos-eps100-min10 | Largo Dom Luiz (Morro da Conceição) | 2020-01-01 (aprox.) | 7 | 278 | 2,5% | 238 | 411 m | sim |
+| todos-eps100-min10 | Rua Zeferino Agra (Arruda) | 2023-06-01 | 250 | 376 | 66,5% | 11 | 261 m | não |
+| todos-eps100-min10 | Praça Farias Neves (Dois Irmãos) | 2023-08-01 | 65 | 381 | 17,1% | 70 | 373 m | não |
+| atrop-eps100-min3 | Largo Dom Luiz | 2020-01-01 (aprox.) | 4 | 75 | 5,3% | 21 | 411 m | sim |
+| atrop-eps100-min3 | Rua Zeferino Agra | 2023-06-01 | — | — | — | — | — | não (nenhum cluster a até 500 m) |
+| atrop-eps100-min3 | Praça Farias Neves | 2023-08-01 | — | — | — | — | — | não (nenhum cluster a até 500 m) |
+| atrop-eps100-min4 | Largo Dom Luiz | 2020-01-01 (aprox.) | 4 | 56 | 7,1% | 21 | 411 m | sim |
+| atrop-eps100-min4 | Rua Zeferino Agra | 2023-06-01 | — | — | — | — | — | não (nenhum cluster a até 500 m) |
+| atrop-eps100-min4 | Praça Farias Neves | 2023-08-01 | — | — | — | — | — | não (nenhum cluster a até 500 m) |
+| atrop-eps100-min5 | Largo Dom Luiz | 2020-01-01 (aprox.) | 4 | 42 | 9,5% | 21 | 411 m | sim |
+| atrop-eps100-min5 | Rua Zeferino Agra | 2023-06-01 | — | — | — | — | — | não (nenhum cluster a até 500 m) |
+| atrop-eps100-min5 | Praça Farias Neves | 2023-08-01 | — | — | — | — | — | não (nenhum cluster a até 500 m) |
+
+Resultado com referência 2025-01-01 (o que vai para `trechos.json`):
+
+| Configuração | Locais aprovados | Clusters | Trechos exportados (top 10%) |
+|---|---|---|---|
+| todos-eps100-min10 | 1 de 3 | 395 | 39 |
+| atrop-eps100-min3 | 1 de 3 | 147 | 14 |
+| atrop-eps100-min4 | 1 de 3 | 111 | 11 |
+| **atrop-eps100-min5** | 1 de 3 | 83 | **8** |
+
+As três configurações de atropelamentos têm o mesmo top 10 (Av. Caxangá, Av. Mascarenhas de
+Moraes, Av. Norte, Av. Agamenon Magalhães, Av. Conde da Boa Vista...); só muda o tamanho da cauda.
+
+### Configuração escolhida: `atrop-eps100-min5`
+
+Padrão do `scripts/load_postgis.sh` e do `sql/04_trechos.sql` desde 06/11/2026 (fonte
+`m4-dbscan-atrop-eps100-min5` no `trechos.json`). Critério combinado com o grupo, em ordem:
+
+1. a configuração que aprova mais locais: **empate**, todas aprovam 1 de 3;
+2. no empate, a de atropelamentos: é o tema do projeto e o geocode deles está completo (95,6% com
+   coordenada), enquanto "todos" ainda depende de 22.506 endereços não geocodificados;
+3. no novo empate, o maior `min_pts`: **5**.
+
+Para rodar outra configuração: `M4_APENAS_ATROPELAMENTOS=false M4_MIN_PTS=10 scripts/load_postgis.sh`.
+
+### Limitações da validação e do score
+
+- **Três locais é uma amostra muito pequena**, e a validação não distingue as configurações:
+  todas aprovam o mesmo local. O único aprovado (Largo Dom Luiz) tem **data aproximada** (só o
+  ano, no Relatório 2020) e está a 411 m do cluster, perto do limite de 500 m. Isso não comprova
+  que o modelo acerta; só mostra que ele não contradiz o caso mais antigo.
+- **Zeferino Agra e Farias Neves não têm nenhum cluster de atropelamento a até 500 m antes da
+  intervenção.** Ou a intervenção não foi motivada por atropelamentos, ou há poucos chamados
+  ali, ou o geocode `via` jogou os pontos para longe. Não dá para distinguir com estes dados.
+- **Pilhas de pontos do nível `via`:** com `min_pts = 5`, um único ponto `endereco_via` com 5
+  atropelamentos na mesma rua e bairro já vira cluster, mesmo que eles tenham acontecido em
+  pontos diferentes da rua. Por isso o `raio_m` dos trechos tem piso de 200 m (os 8 trechos
+  atuais têm exatamente 200 m).
+- **"todos" usa geocode parcial:** 47% dos sinistros com coordenada. A comparação com
+  atropelamentos não é justa até o geocode completo, e os números de "todos" acima vão mudar.
+- **Poucos trechos:** 8 trechos é pouco para o painel e para o módulo, e as faixas de risco
+  ficam concentradas (2 `alto`, 4 `medio`, 2 `baixo`, porque o score é normalizado pelo maior).
+- **O score mede recorrência em chamados, não risco oficial:** soma de UPS com peso de recência
+  sobre os chamados da CTTU (ressalva 2 abaixo), sem exposição (fluxo de veículos e pedestres),
+  sem os números oficiais do PSVR e com a queda de registros a partir de 2020 (ressalva 5).
+
 ## Ressalvas da fonte (não remover)
 
 1. **2015 só a partir de junho** (datas de 2015-06-01 a 2015-12-31). O total anual de 2015

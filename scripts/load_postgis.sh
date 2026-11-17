@@ -3,7 +3,8 @@
 # export the risk trechos in the docs/09 contract format to data/contrato/trechos.json.
 # Needs: Docker running + data/processed/sinistros/sinistros_2015_2024_geo.parquet
 #        (scripts/clean_sinistros.py, then scripts/geocode_sinistros.py).
-# Configuration of the exported trechos (chosen from sql/03_validacao.sql):
+# Configuration of the exported trechos: default = atrop-eps100-min5, chosen from
+# sql/03_validacao.sql (docs/11, "Validação do M4 e configuração escolhida"). Override with e.g.
 #   M4_APENAS_ATROPELAMENTOS=false M4_EPS_M=100 M4_MIN_PTS=10 scripts/load_postgis.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -28,8 +29,8 @@ psql -f /sql/03_validacao.sql
 # O2: risk trechos for the vehicle module and the panel (docs/09, parte 1).
 mkdir -p data/contrato
 psql -tA \
-    -v m4_apenas_atropelamentos="${M4_APENAS_ATROPELAMENTOS:-false}" \
+    -v m4_apenas_atropelamentos="${M4_APENAS_ATROPELAMENTOS:-true}" \
     -v m4_eps_m="${M4_EPS_M:-100}" \
-    -v m4_min_pts="${M4_MIN_PTS:-10}" \
+    -v m4_min_pts="${M4_MIN_PTS:-5}" \
     -f /sql/04_trechos.sql > data/contrato/trechos.json
 .venv/bin/python scripts/validar_trechos.py data/contrato/trechos.json

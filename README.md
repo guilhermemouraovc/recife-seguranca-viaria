@@ -59,24 +59,42 @@ quando ele está acima da velocidade segura num trecho de risco.
   telemetria MQTT (módulo → plataforma)
 - `docs/10-plano-mvp-e-materiais.md`: responsáveis, materiais e como o MVP cobre os
   requisitos da trilha
-- `data/contrato/trechos_exemplo.json`: 4 trechos de exemplo (locais citados pela CTTU; valores de risco fictícios)
+- `data/contrato/trechos.json`: trechos reais gerados pelo modelo (M4, configuração
+  `atrop-eps100-min5`, ver `docs/11`), com `scripts/load_postgis.sh`
+- `data/contrato/trechos_exemplo.json`: 4 trechos de exemplo (locais citados pela CTTU; valores
+  de risco fictícios). A API só usa esse arquivo se `trechos.json` não existir, e aí marca as
+  respostas com `"aviso": "dados de exemplo"`
 
 ```bash
 # validar um arquivo de trechos
-.venv/bin/python scripts/validar_trechos.py data/contrato/trechos_exemplo.json
+.venv/bin/python scripts/validar_trechos.py data/contrato/trechos.json
 
 # subir a API (a partir da raiz do repo)
 .venv/bin/pip install -r api/requirements.txt
 .venv/bin/uvicorn api.app.main:app --reload --host 0.0.0.0 --port 8000
-# http://localhost:8000/docs
+# painel: http://localhost:8000/painel/
+# documentação dos endpoints: http://localhost:8000/docs
+
+# testes da API (sem internet e sem Docker)
+.venv/bin/python -m pytest tests/test_api.py
 ```
 
 | Endpoint | Para quem | O que devolve |
 |---|---|---|
-| `GET /saude` | todos | `{"ok": true}` |
+| `GET /saude` | todos | `ok`, `fonte`, `gerado_em`, `total_trechos` (+ `aviso` se for exemplo) |
 | `GET /trechos` | painel | todos os trechos com nome |
 | `GET /trechos?hora=18` | painel | só os trechos de risco às 18h |
-| `GET /modulo/trechos` | ESP32 | versão compacta, sem `nome` |
+| `GET /trechos/{id}` | painel | um trecho (ex.: `/trechos/c1`); 404 se o id não existir |
+| `GET /modulo/trechos` | ESP32 | versão compacta, sem `nome` (formato fixo, sem `aviso`) |
+| `GET /painel/` | CTTU | painel com mapa (`painel/index.html`) |
+
+**Painel (M6):** um arquivo só (`painel/index.html`, Leaflet 1.9.4, sem build), servido pela
+própria API. Mostra cada trecho como um círculo com o `raio_m` real, colorido por risco, o
+ranking por score na lateral (clicar centraliza o mapa e abre o popup) e o filtro de horário
+(usa `/trechos?hora=H`). No celular, o ranking vai para baixo do mapa. Os tiles vêm do
+OpenStreetMap, então o mapa precisa de internet; os dados não.
+Ressalvas mostradas no rodapé: dados de chamados (não números oficiais do PSVR), coordenadas
+aproximadas e risco por recorrência histórica.
 
 `--host 0.0.0.0` deixa a API acessível para o ESP32 na mesma rede Wi-Fi (use o IP do
 computador, ex.: `http://192.168.0.15:8000/modulo/trechos`).
@@ -146,6 +164,7 @@ Estão detalhadas em `CLAUDE.md`, mas as que mais pegam gente de surpresa:
 │   ├── build_dashboard_data.py             # gera dados pro dashboard em web/
 │   └── validar_trechos.py                  # valida arquivos de trechos contra docs/09
 ├── api/                                    # FastAPI do MVP (trechos para painel e módulo)
+├── painel/                                 # painel com mapa (M6), servido pela API em /painel/
 ├── firmware/                               # código do ESP32 (trilha Embarcados)
 ├── pesquisa-qualitativa/                   # harness da pesquisa com a Secretaria de Trânsito
 │   ├── CLAUDE.md / AGENTS.md               # contrato e papéis (scout/synthesizer/adversary/architect)
