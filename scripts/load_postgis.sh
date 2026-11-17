@@ -34,3 +34,10 @@ psql -tA \
     -v m4_min_pts="${M4_MIN_PTS:-5}" \
     -f /sql/04_trechos.sql > data/contrato/trechos.json
 .venv/bin/python scripts/validar_trechos.py data/contrato/trechos.json
+
+# M6: detalhe por trecho só para o painel (fora do contrato docs/09), mesma configuração.
+psql -tA \
+    -v m4_apenas_atropelamentos="${M4_APENAS_ATROPELAMENTOS:-true}" \
+    -v m4_eps_m="${M4_EPS_M:-100}" \
+    -v m4_min_pts="${M4_MIN_PTS:-5}" \
+    -f /sql/05_painel.sql > painel/detalhe.json

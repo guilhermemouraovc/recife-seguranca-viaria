@@ -4,3 +4,4 @@ pyarrow
 pdfplumber
 pytest
 -r api/requirements.txt
+paho-mqtt
