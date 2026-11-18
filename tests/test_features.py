@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.preparo.features import ENVOLVIDOS, MODAS, VIA_CATEGORICAS, montar_features
+from src.preparo.features import ALVOS, ENVOLVIDOS, MODAS, VIA_CATEGORICAS, montar_features
 
 COLUNAS = ["local_id", "bairro_norm", "data", "hora", "com_vitima", "fatal", "endereco_cruzamento",
            "num_semaforo", "velocidade_max_via", *ENVOLVIDOS, *VIA_CATEGORICAS, *MODAS]
@@ -46,19 +46,22 @@ def test_nao_vazamento(corte):
     completo = montar_features(acidentes, locais)
     so_ate_o_corte = montar_features(acidentes[acidentes["trimestre"] <= corte], locais)
     esperado = completo[completo["trimestre"] <= corte].reset_index(drop=True)
-    pd.testing.assert_frame_equal(so_ate_o_corte.drop(columns="y"), esperado.drop(columns="y"), check_dtype=False)
+    pd.testing.assert_frame_equal(so_ate_o_corte.drop(columns=ALVOS), esperado.drop(columns=ALVOS),
+                                  check_dtype=False)
 
 
-def test_alvo_janelas_e_participacao():
+def test_alvos_janelas_e_participacao():
     f = montar_features(_tabela([
-        {"local_id": "a", "bairro_norm": "PINA", "data": "2019-02-01", "com_vitima": True},
-        {"local_id": "b", "bairro_norm": "PINA", "data": "2019-05-01", "com_vitima": True},
-        {"local_id": "a", "bairro_norm": "PINA", "data": "2019-08-01"},
+        {"local_id": "a", "bairro_norm": "PINA", "data": "2019-02-01", "com_vitima": True, "pedestre": 0},
+        {"local_id": "b", "bairro_norm": "PINA", "data": "2019-05-01", "com_vitima": True, "pedestre": 1},
+        {"local_id": "a", "bairro_norm": "PINA", "data": "2019-08-01", "pedestre": 1},
         {"local_id": "a", "bairro_norm": "PINA", "data": "2019-08-02"},
     ]), ["a", "b"]).set_index(["local_id", "trimestre"])
 
-    assert f.loc["a", "y"].tolist()[:2] == [0, 0] and pd.isna(f.loc[("a", "2019Q3"), "y"])
-    assert f.loc[("b", "2019Q1"), "y"] == 1
+    assert f.loc["a", "y_vitima"].tolist()[:2] == [0, 0] and pd.isna(f.loc[("a", "2019Q3"), "y_vitima"])
+    assert f.loc[("b", "2019Q1"), ["y_vitima", "y_atropelamento"]].tolist() == [1, 1]
+    # Pedestre sem vítima (a, 2019Q3) não é atropelamento com vítima.
+    assert f.loc[("a", "2019Q2"), "y_atropelamento"] == 0
     assert f.loc[("a", "2019Q3"), ["acidentes_1t", "acidentes_4t", "acidentes_vitima_4t"]].tolist() == [2, 3, 1]
     # 2019Q2 + 2019Q3 na cidade: 1 + 2 acidentes; o local b teve 1 deles.
     assert f.loc[("b", "2019Q3"), "rel_acidentes_2t"] == pytest.approx(1 / 3)

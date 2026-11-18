@@ -217,10 +217,24 @@ Gerado por `src/preparo/clean_sinistros.py` a partir de `data/raw/cttu/acidentes
 """
 
 
-if __name__ == "__main__":
+NORMALIZADO = OUT_DIR / "normalizado.parquet"
+
+
+def etapa_normalizar_schema() -> dict:
+    """Tarefa normalizar_schema da DAG: unifica os CSVs e salva o log de colunas por ano."""
     csvs = sorted(RAW_DIR.glob("*.csv"))
     assert csvs, f"no CSV in {RAW_DIR} -- run python -m src.ingestao.fetch_datasets first"
     raw, colunas_por_ano = normalizar_schema(dict(load_year(p) for p in csvs))
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    raw.to_parquet(NORMALIZADO, index=False)
+    (OUT_DIR / "colunas_por_ano.json").write_text(
+        json.dumps(colunas_por_ano, ensure_ascii=False, indent=2), encoding="utf-8")
+    return colunas_por_ano
+
+
+def etapa_limpar() -> int:
+    """Tarefa limpar da DAG: duplicados exatos, tipos e flags; grava o Parquet limpo e o README."""
+    raw = pd.read_parquet(NORMALIZADO)
     duplicado = raw.duplicated()
     duplicados = duplicado.groupby(raw["ano_arquivo"]).sum()
     raw = raw[~duplicado].reset_index(drop=True)
@@ -228,9 +242,12 @@ if __name__ == "__main__":
     assert len(df) == len(raw), "clean() may not drop rows"
     assert df["gravidade"].isin(["SEM VÍTIMA", "COM VÍTIMA", "VÍTIMA FATAL"]).mean() > 0.99, "gravidade/tipo swap broke"
     assert df["data"].notna().all()
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
     df.to_parquet(OUT_DIR / "sinistros_2015_2024.parquet", index=False)
-    (OUT_DIR / "colunas_por_ano.json").write_text(
-        json.dumps(colunas_por_ano, ensure_ascii=False, indent=2), encoding="utf-8")
     (OUT_DIR / "README.md").write_text(readme(df, duplicados), encoding="utf-8")
     print(f"wrote {len(df)} rows to {OUT_DIR} ({int(duplicados.sum())} exact duplicates removed)")
+    return len(df)
+
+
+if __name__ == "__main__":
+    etapa_normalizar_schema()
+    etapa_limpar()
