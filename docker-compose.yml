@@ -1,6 +1,50 @@
 # Trilha de AM (ARCHITECTURE.md, seção 12). Antes do primeiro uso: cp .env.example .env
-# `docker compose up` sobe postgres, mosquitto e mlflow. Airflow, API, dashboard, ingestor e
-# simulador entram nas próximas etapas.
+# `docker compose up` sobe a solução inteira; jupyter (profile dev) e tooling (profile tooling)
+# rodam sob demanda.
+
+# Ambiente comum aos containers Python que falam com o banco, o MLflow e o broker.
+x-ambiente-python: &ambiente-python
+  POSTGRES_USER: ${POSTGRES_USER:-viario}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  POSTGRES_DB: ${POSTGRES_DB:-viario}
+  MLFLOW_TRACKING_URI: http://mlflow:5000
+  MQTT_USER: ${MQTT_USER:-viario}
+  MQTT_PASSWORD: ${MQTT_PASSWORD}
+  # O UID do AIRFLOW_UID não tem nome nem home na imagem: USER evita o aviso do MLflow ao marcar o
+  # autor do run, HOME dá um diretório gravável, e o MLflow não procura o git (ausente na imagem).
+  USER: viario
+  HOME: /tmp
+  GIT_PYTHON_REFRESH: quiet
+
+x-ambiente-airflow: &ambiente-airflow
+  <<: *ambiente-python
+  AIRFLOW__CORE__EXECUTOR: LocalExecutor
+  AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+  AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-viario}:${POSTGRES_PASSWORD}@postgres:5432/airflow
+  # No Airflow 3 as tarefas falam com o api-server; o segredo assina os tokens delas e tem de ser o
+  # mesmo em todos os serviços do Airflow.
+  AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
+  AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:?defina AIRFLOW_JWT_SECRET no .env (cp .env.example .env)}
+  AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: ${AIRFLOW_ADMIN_USER:-admin}:admin
+  AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/senhas.json
+  AIRFLOW_ADMIN_USER: ${AIRFLOW_ADMIN_USER:-admin}
+  AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:?defina AIRFLOW_ADMIN_PASSWORD no .env (cp .env.example .env)}
+
+x-airflow: &airflow
+  build:
+    context: .
+    dockerfile: docker/airflow/Dockerfile
+  user: "${AIRFLOW_UID:-50000}:0"
+  environment: *ambiente-airflow
+  volumes:
+    - ./dags:/opt/airflow/dags:ro
+    - ./src:/app/src:ro
+    - ./tests:/app/tests:ro
+    - ./data:/app/data
+    - airflow_logs:/opt/airflow/logs
+  restart: unless-stopped
+
 services:
   postgres:
     image: postgres:16
@@ -13,7 +57,7 @@ services:
       # Volume nomeado, não bind mount: o Postgres exige dono e permissão 0700 no diretório
       # de dados, o que um bind mount em NTFS (Windows) não garante.
       - pgdata:/var/lib/postgresql/data
-      # Cria o banco do MLflow na primeira subida (só .sql: não depende de bit de execução).
+      # Cria os bancos do MLflow e do Airflow na primeira subida (só .sql: não depende de bit de execução).
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       # -h 127.0.0.1: the init-time temp server is socket-only, so this waits for the real one
@@ -59,11 +103,146 @@ services:
       MLFLOW_SERVER_ALLOWED_HOSTS: mlflow,mlflow:5000,localhost,localhost:*,127.0.0.1,127.0.0.1:*
     ports: ["${MLFLOW_PORT:-5000}:5000"]
     volumes:
+      # Só o mlflow monta os artefatos; os clientes leem e gravam por HTTP (serve-artifacts, seção 7).
       - mlflow_artifacts:/mlflow/artifacts
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=3)"]
       interval: 5s
       retries: 30
+
+  airflow-init:
+    <<: *airflow
+    command: ["airflow", "db", "migrate"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  airflow-api-server:
+    <<: *airflow
+    # O simple auth manager do Airflow 3 lê usuário e senha deste arquivo, gerado a partir do .env.
+    command:
+      - sh
+      - -c
+      - >-
+        python -c "import json, os; json.dump({os.environ['AIRFLOW_ADMIN_USER']: os.environ['AIRFLOW_ADMIN_PASSWORD']}, open('/opt/airflow/senhas.json', 'w'))" &&
+        exec airflow api-server --port 8080
+    ports: ["${AIRFLOW_PORT:-8080}:8080"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/v2/monitor/health', timeout=5)"]
+      interval: 10s
+      retries: 30
+      start_period: 30s
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow
+    command: ["airflow", "scheduler"]
+    healthcheck:
+      test: ["CMD", "airflow", "jobs", "check", "--job-type", "SchedulerJob", "--local"]
+      interval: 30s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      airflow-api-server:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+
+  airflow-dag-processor:
+    <<: *airflow
+    command: ["airflow", "dag-processor"]
+    healthcheck:
+      test: ["CMD", "airflow", "jobs", "check", "--job-type", "DagProcessorJob", "--local"]
+      interval: 30s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  ingestor:
+    build:
+      context: .
+      dockerfile: docker/ingestor/Dockerfile
+    user: "${AIRFLOW_UID:-50000}:0"
+    environment: *ambiente-python
+    volumes:
+      - ./src:/app/src:ro
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+
+  simulador:
+    build:
+      context: .
+      dockerfile: docker/simulador/Dockerfile
+    user: "${AIRFLOW_UID:-50000}:0"
+    environment:
+      <<: *ambiente-python
+      SIMULADOR_INTERVALO_S: ${SIMULADOR_INTERVALO_S:-2}
+    volumes:
+      - ./src:/app/src:ro
+      - ./embedded:/app/embedded:ro
+    restart: unless-stopped
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    user: "${AIRFLOW_UID:-50000}:0"
+    environment: *ambiente-python
+    ports: ["${API_PORT:-8000}:8000"]
+    volumes:
+      # tests/ e data/ montados para `docker compose run --rm api pytest` (seção 12).
+      - ./src:/app/src:ro
+      - ./api:/app/api:ro
+      - ./embedded:/app/embedded:ro
+      - ./tests:/app/tests:ro
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 10s
+      retries: 30
+      start_period: 20s
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard/Dockerfile
+    user: "${AIRFLOW_UID:-50000}:0"
+    environment:
+      <<: *ambiente-python
+      API_URL: http://api:8000
+      AIRFLOW_URL: http://airflow-api-server:8080
+      AIRFLOW_ADMIN_USER: ${AIRFLOW_ADMIN_USER:-admin}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
+    ports: ["${DASHBOARD_PORT:-8501}:8501"]
+    volumes:
+      - ./src:/app/src:ro
+      - ./app:/app/app:ro
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
 
   # Notebooks: docker compose --profile dev up jupyter  (http://localhost:8888, token do .env)
   jupyter:
@@ -73,16 +252,15 @@ services:
     profiles: ["dev"]
     user: "${AIRFLOW_UID:-50000}:0"
     environment:
+      <<: *ambiente-python
       JUPYTER_TOKEN: ${JUPYTER_TOKEN:?defina JUPYTER_TOKEN no .env (cp .env.example .env)}
-      # O UID do AIRFLOW_UID não tem home na imagem; o Jupyter precisa de uma para o runtime.
-      HOME: /tmp
     ports: ["${JUPYTER_PORT:-8888}:8888"]
     volumes:
       - ./notebooks:/app/notebooks
       - ./src:/app/src:ro
       - ./data:/app/data
 
-  # Ingestão, preparo e testes, sob demanda: docker compose run --rm tooling <comando>
+  # Ingestão, preparo, treino e testes, sob demanda: docker compose run --rm tooling <comando>
   # O profile evita que `docker compose up` suba este serviço sem comando.
   tooling:
     build:
@@ -94,18 +272,19 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    environment:
-      # Lidas por src/comum/db.py para gravar dim_local e features.
-      POSTGRES_USER: ${POSTGRES_USER:-viario}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-viario}
+      mlflow:
+        condition: service_healthy
+    environment: *ambiente-python
     volumes:
       # Só o que a trilha de AM usa: legado/ fica fora do container e não pode ser importado.
       # Tudo roda via `python -m`, sem depender de bit de execução (que NTFS não tem).
       - ./src:/app/src:ro
       - ./tests:/app/tests:ro
+      - ./embedded:/app/embedded:ro
+      - ./api:/app/api:ro
       - ./data:/app/data
 
 volumes:
   pgdata:
   mlflow_artifacts:
+  airflow_logs:

@@ -125,22 +125,23 @@ A lista completa sai no README gerado em `data/processed/sinistros/`.
 ```
 .
 ├── ARCHITECTURE.md          # desenho da solução de AM (fonte da verdade)
-├── docker-compose.yml       # postgres, mosquitto, mlflow, jupyter (dev) e tooling
+├── docker-compose.yml       # postgres, mosquitto, mlflow, airflow, api, dashboard, ingestor, simulador, jupyter e tooling
 ├── .env.example             # variáveis do compose (copie para .env)
 ├── requirements.txt         # dependências Python com versões travadas (ARCHITECTURE.md, seção 14)
-├── docker/
-│   ├── python/              # Dockerfile do tooling
-│   ├── mlflow/              # Dockerfile do tracking server
-│   ├── jupyter/             # Dockerfile do JupyterLab
-│   ├── mosquitto/           # mosquitto.conf (sem acesso anônimo)
-│   └── postgres/init/       # cria o banco do MLflow na primeira subida
-├── notebooks/               # notebooks de EDA e features (etapa 4)
+├── docker/                  # um Dockerfile por serviço, mosquitto.conf e init do Postgres
+├── notebooks/               # 01_eda_bootstrap e 02_preparacao_features
 ├── src/
-│   ├── ingestao/            # ckan_client, manifest, fetch_datasets
+│   ├── ingestao/            # ckan_client, manifest, fetch_datasets, telemetria (ingestor MQTT)
 │   ├── preparo/             # clean_sinistros, local_id, features
-│   └── comum/               # conexão com o Postgres
+│   ├── modelagem/           # pipeline, validacao, metricas, treino (MLflow), scoring
+│   └── comum/               # conexão com o Postgres e cliente MQTT
+├── dags/                    # dag_ingestao_preparo, dag_treino, dag_scoring
+├── api/                     # FastAPI
+├── app/                     # dashboard Streamlit
+├── embedded/
+│   ├── simulador/           # módulo veicular simulado (publica em viario/telemetria)
+│   └── esp32/               # README do módulo ESP32 (payload MQTT com local_id)
 ├── tests/                   # pytest
-├── embedded/esp32/          # README do módulo ESP32 (payload MQTT com local_id)
 ├── data/                    # raw/ e processed/ fora do git; manifest.jsonl versionado
 ├── legado/mvp-geocodificado/ # MVP anterior (Nominatim + PostGIS), fora da solução atual
 └── legado/projeto6/         # docs/ e pesquisa-qualitativa/ do Projeto 6

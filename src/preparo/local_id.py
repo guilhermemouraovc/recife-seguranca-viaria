@@ -95,7 +95,25 @@ def resumo(acidentes: pd.DataFrame, dim_local: pd.DataFrame, exclusoes: dict) ->
     }
 
 
-if __name__ == "__main__":
+def indicadores_ano(acidentes: pd.DataFrame) -> pd.DataFrame:
+    """Indicadores do Projeto 6 por ano, para a aba 1 do dashboard (ARCHITECTURE.md, seção 17.6):
+    volume, vítimas, atropelamentos com vítima e usuários vulneráveis envolvidos."""
+    ano = acidentes["data"].dt.year.rename("ano")
+    atropelamento = (acidentes["pedestre"].fillna(0) > 0) & acidentes["com_vitima"]
+    return pd.DataFrame({
+        "acidentes": acidentes.groupby(ano).size(),
+        "acidentes_com_vitima": acidentes["com_vitima"].groupby(ano).sum(),
+        "vitimas": acidentes["vitimas"].fillna(0).groupby(ano).sum(),
+        "vitimas_fatais": acidentes["vitimasfatais"].fillna(0).groupby(ano).sum(),
+        "atropelamentos_com_vitima": atropelamento.groupby(ano).sum(),
+        "com_pedestre": acidentes["envolve_pedestre"].groupby(ano).sum(),
+        "com_ciclista": acidentes["envolve_ciclista"].groupby(ano).sum(),
+        "com_moto": acidentes["envolve_moto"].groupby(ano).sum(),
+    }).astype("int64").reset_index()
+
+
+def executar() -> dict:
+    """Tarefa construir_local_id da DAG: grava acidentes com local, dim_local e indicadores."""
     from src.comum.db import engine
 
     acidentes, exclusoes = preparar_acidentes(pd.read_parquet(ENTRADA))
@@ -107,4 +125,10 @@ if __name__ == "__main__":
     dim_local.to_parquet(SAIDA / "dim_local.parquet", index=False)
     (SAIDA / "local_id_resumo.json").write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
     dim_local.to_sql("dim_local", engine(), if_exists="replace", index=False)
+    indicadores_ano(acidentes).to_sql("indicadores_ano", engine(), if_exists="replace", index=False)
     print(json.dumps(info, ensure_ascii=False, indent=2))
+    return info
+
+
+if __name__ == "__main__":
+    executar()

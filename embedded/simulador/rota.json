@@ -1,0 +1,10 @@
+{
+  "descricao": "Tabela de rota embarcada (ARCHITECTURE.md, seção 8.1): cada ponto já está associado a um local_id de dim_local (sha1(bairro_norm|logradouro_norm)[:12], os 5 locais com mais acidentes da grade). As coordenadas são SIMULADAS e aproximadas, não geocodificadas; um ESP32 real precisaria de um resolvedor GPS -> local (embedded/README.md).",
+  "pontos": [
+    {"local_id": "7c0fbb1fe74c", "bairro": "IMBIRIBEIRA", "logradouro": "AV MARECHAL MASCARENHAS DE MORAES", "lat": -8.1065, "lon": -34.9105, "velocidade_max_kmh": 60},
+    {"local_id": "64fc41a0e657", "bairro": "BOA VIAGEM", "logradouro": "AV ENGENHEIRO DOMINGOS FERREIRA", "lat": -8.1205, "lon": -34.8985, "velocidade_max_kmh": 60},
+    {"local_id": "99ddf5f83bfb", "bairro": "SANTO AMARO", "logradouro": "AV GOVERNADOR AGAMENON MAGALHAES", "lat": -8.0505, "lon": -34.8885, "velocidade_max_kmh": 60},
+    {"local_id": "47b269bb040f", "bairro": "SANTO AMARO", "logradouro": "AV CRUZ CABUGA", "lat": -8.0440, "lon": -34.8765, "velocidade_max_kmh": 40},
+    {"local_id": "15b71374f799", "bairro": "CAXANGÁ", "logradouro": "AV CAXANGA", "lat": -8.0335, "lon": -34.9545, "velocidade_max_kmh": 60}
+  ]
+}
