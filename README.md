@@ -88,13 +88,25 @@ quando ele está acima da velocidade segura num trecho de risco.
 | `GET /modulo/trechos` | ESP32 | versão compacta, sem `nome` (formato fixo, sem `aviso`) |
 | `GET /painel/` | CTTU | painel com mapa (`painel/index.html`) |
 
-**Painel (M6):** um arquivo só (`painel/index.html`, Leaflet 1.9.4, sem build), servido pela
-própria API. Mostra cada trecho como um círculo com o `raio_m` real, colorido por risco, o
-ranking por score na lateral (clicar centraliza o mapa e abre o popup) e o filtro de horário
-(usa `/trechos?hora=H`). No celular, o ranking vai para baixo do mapa. Os tiles vêm do
-OpenStreetMap, então o mapa precisa de internet; os dados não.
-Ressalvas mostradas no rodapé: dados de chamados (não números oficiais do PSVR), coordenadas
-aproximadas e risco por recorrência histórica.
+**Painel (M6):** um arquivo só (`painel/index.html`, Leaflet 1.9.4 + mqtt.js, sem build),
+servido pela própria API, com quatro abas:
+
+- **Mapa de risco:** trechos numerados pela posição no ranking, círculo = `raio_m` do alerta,
+  filtro por faixa horária e ranking com atropelamentos, óbitos e score.
+- **Detalhe do trecho:** KPIs, atropelamentos por dia × faixa horária, ano a ano (com/sem
+  vítima), quem estava envolvido e o que o módulo faz no trecho (vel. segura, raio, horário).
+  Vem de `painel/detalhe.json` (`sql/05_painel.sql`, gerado pelo `load_postgis.sh`; fora do
+  contrato docs/09).
+- **Módulo veicular:** telemetria MQTT ao vivo (semáforo, velocidade, trecho, trajeto, log de
+  alertas). Lê os tópicos do docs/09 e os do sketch Wokwi do grupo (`g3/veiculo/...`). Sem
+  ESP32, rode o simulador: `.venv/bin/python scripts/simular_modulo.py [--hora 10]`.
+- **Metodologia:** score UPS, validação do docs/11 e ressalvas.
+
+Os tiles vêm do OpenStreetMap e o broker MQTT é o público da HiveMQ, então o painel precisa de
+internet; os dados dos trechos não.
+
+![Painel M6: mapa de risco](docs/img/painel-m6.jpg)
+![Painel M6: módulo veicular com o simulador](docs/img/painel-m6-modulo.jpg)
 
 `--host 0.0.0.0` deixa a API acessível para o ESP32 na mesma rede Wi-Fi (use o IP do
 computador, ex.: `http://192.168.0.15:8000/modulo/trechos`).

@@ -62,4 +62,8 @@ if __name__ == "__main__":
     }
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    # data.js: lets index.html open via file:// (Chrome blocks fetch there)
+    OUT_PATH.with_suffix(".js").write_text(
+        "window.DATA = " + json.dumps(data, ensure_ascii=False) + ";\n", encoding="utf-8"
+    )
     print(f"wrote {OUT_PATH} ({len(data['sinistros_por_ano'])} years)")
