@@ -121,4 +121,4 @@ def test_painel_servido(client):
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
     assert "leaflet@1.9.4" in r.text
-    assert 'fetch(url)' in r.text and '"/trechos"' in r.text
+    assert 'fetch("/trechos")' in r.text

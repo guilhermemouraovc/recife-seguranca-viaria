@@ -95,6 +95,10 @@ y = 0  caso contrário
 
 Acidente com vítima = `vitimas > 0` ou `vitimasfatais > 0`.
 
+**Por que não atropelamento como alvo principal.** O tema do Projeto 6 é "onde e quando vai acontecer o próximo atropelamento". Na unidade `local_id × trimestre`, porém, atropelamentos são raros demais: a grande maioria dos pares local-trimestre fica sem nenhum positivo, e os modelos aprenderiam a prever sempre 0. "Acidente com vítima" mantém o foco em gravidade e tem positivos suficientes para treinar e validar. A EDA precisa mostrar as duas taxas de positivos lado a lado para sustentar essa troca no relatório.
+
+**Atropelamento como alvo secundário.** `y_atropelamento` (≥ 1 atropelamento no trimestre seguinte) é calculado no mesmo pipeline. O melhor modelo é reavaliado nele (mesmas features e mesma validação temporal), e o resultado é reportado mesmo que seja fraco, para ligar a solução de AM ao problema do Projeto 6.
+
 **Quebra de série.** Os registros "sem vítima" praticamente desaparecem a partir de 2020, o que muda o significado do alvo. Tratamento:
 
 - **Linhas de treino, validação e teste: só de 2020Q1 em diante.** 2015–2019 entra **apenas** como histórico das features.
@@ -151,7 +155,8 @@ Todas calculadas **apenas com dados até o trimestre da linha**. O alvo é o tri
 | Estratégia | Como aplicar |
 |---|---|
 | **Holdout temporal** | Treino: 2020Q1 a 2022Q4. Validação: 2023. Teste: 2024. É a divisão principal, porque o problema é de previsão no tempo |
-| **k-fold estratificado** | `StratifiedKFold(n_splits=5)` dentro do treino, para comparar modelos e rodar o Optuna |
+| **Validação cruzada temporal** | `TimeSeriesSplit(n_splits=5)` aplicado **sobre a lista ordenada de trimestres** do treino (janela crescente), e não sobre as linhas: cada fold treina em trimestres anteriores e valida no bloco seguinte, sem um mesmo trimestre ficar dos dois lados. É a validação cruzada principal, usada para comparar modelos e rodar o Optuna |
+| **k-fold estratificado (só comparação)** | `StratifiedKFold(n_splits=5)` rodado uma vez, nos mesmos modelos, **só para mostrar o vazamento**: em dados de painel (o mesmo local em vários trimestres) ele mistura passado e futuro entre os folds e infla as métricas. A diferença entre as duas validações vai para o notebook e para o relatório. Nunca é usado para escolher modelo ou hiperparâmetro |
 | **Leave-One-Out** | Não se aplica: a base tem dezenas de milhares de linhas e LOO seria inviável. **Registrar essa justificativa no notebook e no relatório** — a especificação pede "quando aplicável" |
 | **Overfitting / underfitting** | `learning_curve` e comparação treino × validação por modelo |
 | **Estabilidade** | Desvio padrão das métricas entre os folds, reportado junto da média |
@@ -209,6 +214,8 @@ Ao fim do experimento 3, registrar o melhor no Model Registry como `risco-viario
 ### 8.1 Sistema embarcado
 
 - `embedded/simulador/` — serviço Python que gera passagens de veículo sobre uma lista de locais, publicando velocidade, horário e frenagens. É o que roda no compose e o que será demonstrado.
+
+**Como o módulo chega ao `local_id`.** Um veículo real conhece a própria posição (GPS), não o código da rua. Na demonstração, o simulador percorre uma **rota pré-definida**: uma sequência de `local_id` reais do dataset, com tempo de passagem por local. O "GPS" do simulador é essa rota, e é ela que vira `local_id` no payload. Num módulo real, a conversão seria um *map-matching* no próprio dispositivo: uma tabela `local_id → geometria` carregada no ESP32, consultada pela posição do GPS. Essa tabela exige geocodificar os locais, o que está fora desta arquitetura (seção 2.3; a tentativa anterior está em `legado/mvp-geocodificado/`). O relatório deve apresentar essa limitação explicitamente.
 - `embedded/esp32/` — sketch Arduino com o mesmo payload. Opcional na demonstração. Parte do conteúdo de `firmware/README.md` da master, **trocando o alerta por lat/lon pelo `local_id`**.
 
 ### 8.2 Tópicos
@@ -331,13 +338,14 @@ Pastas da trilha de AM:
 ├── reports/                    # relatório em template SBC
 ├── docker/                     # Dockerfiles por serviço
 ├── legado/mvp-geocodificado/   # MVP anterior, fora da solução (15.2)
+├── legado/projeto6/            # docs/ e pesquisa-qualitativa/ do Projeto 6 (15.1)
 ├── docker-compose.yml
 ├── .env.example
 ├── requirements.txt
 └── README.md
 ```
 
-`docs/`, `pesquisa-qualitativa/`, `.github/` e as pastas de configuração de agentes foram removidos (seção 15.1).
+`docs/` e `pesquisa-qualitativa/` foram movidos para `legado/projeto6/`; `.github/` e as pastas de configuração de agentes foram removidos (seção 15.1).
 
 ### Notebooks
 
@@ -381,9 +389,11 @@ jupyterlab
 
 ## 15. O que sai, o que fica e o que nunca entra
 
-### 15.1 Projeto 6 e pastas de agentes: removidos
+### 15.1 Projeto 6: movido; pastas de agentes: removidas
 
-`docs/`, `pesquisa-qualitativa/`, `.github/` e as pastas de configuração de agentes (`.agents`, `.codex`, `.cursor`, `.goose`, `.grok`, `.kimi-code`, `.omp`) foram apagados do repositório em 16/11. Seguem recuperáveis pelo histórico do git. As pastas de agentes, `.claude/` e `CLAUDE.md` estão no `.gitignore`; `.github/` não, para não bloquear um CI futuro.
+`docs/` e `pesquisa-qualitativa/` são material de outra entrega do grupo, e o dashboard de AM precisa mostrar métricas da solução do Projeto 6. Por isso foram **movidos, sem alteração, para `legado/projeto6/`** (versão da `master` em 18/11). Se o grupo decidir tirá-los do repositório, isso é feito num PR separado.
+
+`.github/` e as pastas de configuração de agentes (`.agents`, `.codex`, `.cursor`, `.goose`, `.grok`, `.kimi-code`, `.omp`) foram apagados em 16/11 e seguem recuperáveis pelo histórico do git. As pastas de agentes, `.claude/` e `CLAUDE.md` estão no `.gitignore`; `.github/` não, para não bloquear um CI futuro.
 
 ### 15.2 Mover, não deletar
 
@@ -393,7 +403,7 @@ O MVP geocodificado contraria esta arquitetura. **Mova para `legado/mvp-geocodif
 
 Nenhum desses arquivos pode ser importado pelo código novo, e nenhum entra no `docker-compose.yml` nem no `requirements.txt`.
 
-O contrato de trechos lat/lon (`docs/09`) e a documentação da base geocodificada (`docs/11`) saíram com `docs/` (15.1).
+O contrato de trechos lat/lon e a documentação da base geocodificada estão em `legado/projeto6/docs/09-contrato-trechos-e-telemetria.md` e `legado/projeto6/docs/11-base-atropelamentos.md`.
 
 ### 15.3 CLAUDE.md e .claude/
 

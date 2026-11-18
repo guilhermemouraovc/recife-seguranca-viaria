@@ -142,7 +142,8 @@ A lista completa sai no README gerado em `data/processed/sinistros/`.
 ├── tests/                   # pytest
 ├── embedded/esp32/          # README do módulo ESP32 (payload MQTT com local_id)
 ├── data/                    # raw/ e processed/ fora do git; manifest.jsonl versionado
-└── legado/mvp-geocodificado/ # MVP anterior (Nominatim + PostGIS), fora da solução atual
+├── legado/mvp-geocodificado/ # MVP anterior (Nominatim + PostGIS), fora da solução atual
+└── legado/projeto6/         # docs/ e pesquisa-qualitativa/ do Projeto 6
 ```
 
 ## Legado e histórico
@@ -150,9 +151,10 @@ A lista completa sai no README gerado em `data/processed/sinistros/`.
 O MVP anterior, baseado em geocodificação (Nominatim + PostGIS e contrato de trechos lat/lon),
 foi movido sem apagar para `legado/mvp-geocodificado/`. O README de lá explica o porquê.
 
-O material do Projeto 6 que dividia este repositório (`docs/`, `pesquisa-qualitativa/`) e as
-configurações de agentes de IA (`.github/`, `.agents`, `.codex`, `.cursor`, `.goose`, `.grok`,
-`.kimi-code`, `.omp`) foram removidos e seguem só no histórico do git. `CLAUDE.md` e `.claude/`
+O material do Projeto 6 que dividia este repositório (`docs/`, `pesquisa-qualitativa/`) foi
+movido sem alteração para `legado/projeto6/`. As configurações de agentes de IA (`.github/`,
+`.agents`, `.codex`, `.cursor`, `.goose`, `.grok`, `.kimi-code`, `.omp`) foram removidas e
+seguem só no histórico do git. `CLAUDE.md` e `.claude/`
 são configuração local de quem usa o Claude Code e estão no `.gitignore`.
 
 ## Origem dos dados
