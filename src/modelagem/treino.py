@@ -31,10 +31,10 @@ EXPERIMENTOS = {"baseline": "01_baseline", "comparacao": "02_comparacao_modelos"
                 "otimizacao": "03_otimizacao_hiperparametros"}
 BASELINE = "regressao_logistica"
 COMPARADOS = ["knn", "arvore_decisao", "random_forest", "adaboost", "mlp"]
-# Orçamento de busca (docs-am/decisoes.md): 10 trials do Optuna por modelo; o RandomizedSearchCV
+# Orçamento de busca (ARCHITECTURE.md, seção 17.5): 10 trials do Optuna por modelo; o RandomizedSearchCV
 # é só a referência, com 5 sorteios.
 N_TRIALS, N_SORTEIOS = 10, 5
-# y_vitima é o primário: o atropelamento não tem positivos suficientes (docs-am/decisoes.md).
+# y_vitima é o primário: o atropelamento não tem positivos suficientes (ARCHITECTURE.md, seção 17.2).
 NOME_REGISTRO = {"y_vitima": "risco-viario", "y_atropelamento": "risco-viario-atropelamento"}
 ALIAS = "champion"
 # O padrão do MLflow 3.18 (skops) recusa tipos como numpy.dtype, que o OneHotEncoder guarda.

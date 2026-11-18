@@ -101,10 +101,10 @@ Acidente com vítima = `vitimas > 0` ou `vitimasfatais > 0`.
 
 **Quebra de série.** Os registros "sem vítima" praticamente desaparecem a partir de 2020, o que muda o significado do alvo. Tratamento:
 
-- **Linhas de treino, validação e teste: só de 2020Q1 em diante.** 2015–2019 entra **apenas** como histórico das features.
+- **Linhas de treino, validação e teste: só de 2021Q1 em diante.** 2015–2020 entra **apenas** como histórico das features (o corte saiu de 2020Q1 para 2021Q1 pela EDA; ver seção 17.1).
 - Features de histórico em **duas formas**: contagem absoluta e **participação relativa** (a fração dos acidentes da cidade naquele trimestre que caiu naquele local). A relativa é imune à mudança de patamar do registro.
 - Incluir `ano` como feature e um booleano `periodo_pandemia` para 2020–2021.
-- A EDA precisa trazer o gráfico da proporção por ano e justificar o corte. Se 2020 se mostrar ainda em transição, mova o corte para 2021Q1 e registre a decisão.
+- A EDA traz o gráfico da proporção por ano e por trimestre e justifica o corte (`notebooks/01_eda_bootstrap.ipynb`).
 
 Janelas resultantes na seção 4.
 
@@ -137,7 +137,7 @@ Todas calculadas **apenas com dados até o trimestre da linha**. O alvo é o tri
 
 **Temporal**: número do trimestre no ano (1 a 4), `ano`, `periodo_pandemia`.
 
-**Telemetria** (quando houver dados do ESP32, agregados por local × trimestre): velocidade média, velocidade máxima, nº de passagens, nº de frenagens bruscas. Nulo nos períodos sem telemetria.
+**Telemetria** (quando houver dados do ESP32, agregados por local × trimestre): velocidade média, velocidade máxima, nº de passagens, nº de frenagens bruscas. Nulo nos períodos sem telemetria. As colunas `tel_*` são calculadas, mas ficam fora do modelo nesta fase (seção 17.4).
 
 ### 3.4 Tratamento
 
@@ -154,14 +154,14 @@ Todas calculadas **apenas com dados até o trimestre da linha**. O alvo é o tri
 
 | Estratégia | Como aplicar |
 |---|---|
-| **Holdout temporal** | Treino: 2020Q1 a 2022Q4. Validação: 2023. Teste: 2024. É a divisão principal, porque o problema é de previsão no tempo |
-| **Validação cruzada temporal** | `TimeSeriesSplit(n_splits=5)` aplicado **sobre a lista ordenada de trimestres** do treino (janela crescente), e não sobre as linhas: cada fold treina em trimestres anteriores e valida no bloco seguinte, sem um mesmo trimestre ficar dos dois lados. É a validação cruzada principal, usada para comparar modelos e rodar o Optuna |
+| **Holdout temporal** | Treino: 2021Q1 a 2022Q4. Validação: 2023. Teste: 2024 (2024Q4 não tem alvo; é a linha de scoring). É a divisão principal, porque o problema é de previsão no tempo |
+| **Validação cruzada temporal** | Janela crescente **sobre a lista ordenada de trimestres** do treino, e não sobre as linhas (`src/modelagem/validacao.py`, `folds_temporais`): o fold *i* treina nos trimestres anteriores e valida no trimestre seguinte inteiro, com no mínimo 4 trimestres de treino (4 folds). Nenhum trimestre fica dos dois lados. É a validação cruzada principal, usada para comparar modelos e rodar o Optuna. O `TimeSeriesSplit` não é usado porque corta por posição de linha (seção 17.3) |
 | **k-fold estratificado (só comparação)** | `StratifiedKFold(n_splits=5)` rodado uma vez, nos mesmos modelos, **só para mostrar o vazamento**: em dados de painel (o mesmo local em vários trimestres) ele mistura passado e futuro entre os folds e infla as métricas. A diferença entre as duas validações vai para o notebook e para o relatório. Nunca é usado para escolher modelo ou hiperparâmetro |
 | **Leave-One-Out** | Não se aplica: a base tem dezenas de milhares de linhas e LOO seria inviável. **Registrar essa justificativa no notebook e no relatório** — a especificação pede "quando aplicável" |
 | **Overfitting / underfitting** | `learning_curve` e comparação treino × validação por modelo |
 | **Estabilidade** | Desvio padrão das métricas entre os folds, reportado junto da média |
 
-**Otimização**: `RandomizedSearchCV` como referência e **Optuna** como estratégia principal, nos 2 melhores modelos. Documentar espaço de busca, nº de trials e resultado.
+**Otimização**: `RandomizedSearchCV` como referência e **Optuna** como estratégia principal, nos 2 melhores modelos. Espaços de busca em `src/modelagem/treino.py` (`ESPACOS`, `SORTEIOS`); orçamento na seção 17.5.
 
 ---
 
@@ -205,7 +205,7 @@ Três experimentos, com estes nomes exatos:
 
 Em todo run: parâmetros, todas as métricas da seção 5, e como artefatos os gráficos em PNG e o `classification_report` em texto. Modelo salvo com `mlflow.sklearn.log_model`.
 
-Ao fim do experimento 3, registrar o melhor no Model Registry como `risco-viario`, alias `@champion`. A DAG de scoring carrega `models:/risco-viario@champion`.
+Ao fim do experimento 3, registrar o melhor no Model Registry como `risco-viario`, alias `@champion`. A DAG de scoring carrega `models:/risco-viario@champion`. O alvo secundário tem o próprio registro, `risco-viario-atropelamento@champion` (seção 17.2).
 
 ---
 
@@ -264,6 +264,7 @@ Não criar uma quarta DAG. A telemetria é serviço contínuo.
 | `POST /score` | inferência sob demanda |
 | `GET /metrics` | métricas do modelo em produção, do MLflow |
 | `GET /modelo` | versão, `run_id` e data de treino do modelo carregado |
+| `GET /indicadores` | indicadores do Projeto 6 por ano, para a aba 1 do dashboard (seção 17.6) |
 
 Entrada e saída com Pydantic. O OpenAPI em `/docs` é parte da entrega.
 
@@ -440,3 +441,33 @@ Base: branch `fix/ml-architecture-base`, criada a partir da `master`. Nada vem d
 10. **`tests/`** e o README
 
 Cada etapa roda de ponta a ponta, dentro do Docker, antes da seguinte. Não gere esqueleto vazio nem `pass` com `TODO`: cada arquivo entregue precisa executar.
+
+---
+
+## 17. Decisões de implementação
+
+Decisões tomadas durante a implementação que mudam ou detalham as seções anteriores. O código e os notebooks citam estes itens.
+
+### 17.1 Corte de modelagem em 2021Q1
+
+O gráfico trimestral da EDA mostra que a quebra de série não é uma transição ao longo de 2020, e sim um degrau entre 2020Q1 (22% com vítima) e 2020Q2 (72%). Mesmo assim, o corte fica em **2021Q1**, e não em 2020Q3: as features de histórico usam janelas de até 4 trimestres, e 2021Q1 é o primeiro trimestre cuja janela inteira está no regime novo. Uma linha de 2020Q3 somaria, na mesma feature, acidentes dos dois regimes. Treino, validação e teste usam só linhas de 2021Q1 em diante; 2015–2020 entra apenas como histórico.
+
+### 17.2 Atropelamento: alvo secundário com modelo próprio
+
+`y_atropelamento` tem só 28 a 48 positivos por trimestre (1,5–2,7%), cerca de 320 em todo o treino, para dezenas de colunas depois do one-hot. A regra usual de pelo menos 10 eventos por variável não se sustenta, e o PR-AUC medido sobre 30 a 40 positivos por trimestre oscila muito. Os dois alvos passam pelo mesmo pipeline (baseline, comparação, otimização e campeão), e cada um é registrado no Model Registry: `risco-viario` (`y_vitima`) e `risco-viario-atropelamento`. O alvo de atropelamento continua secundário na leitura dos resultados.
+
+### 17.3 Validação cruzada sobre trimestres, não `TimeSeriesSplit`
+
+O `TimeSeriesSplit` corta por posição de linha. Como cada trimestre tem o mesmo número de linhas (um por local da grade), um corte por linha pode deixar um trimestre dividido entre treino e validação. `folds_temporais` anda sobre os trimestres distintos, em janela crescente, e valida sempre num trimestre inteiro. `tests/test_validacao.py` garante que o treino de todo fold termina antes de a validação começar.
+
+### 17.4 Telemetria fora do modelo nesta fase
+
+As colunas `tel_*` existem na tabela `features`, mas a telemetria (simulada) só cobre o período em que o simulador roda, que não cai em nenhum trimestre de treino. Uma feature que é nula em todo o treino não ensina nada ao modelo e só seria imputada. `colunas_do_modelo` deixa `tel_*` de fora; ela volta quando houver telemetria cobrindo trimestres de treino.
+
+### 17.5 Orçamento da busca de hiperparâmetros
+
+Optuna (TPE, semente fixa) com **10 trials** por modelo, nos 2 melhores da comparação, e `RandomizedSearchCV` com **5 sorteios** como referência. Os dois usam os folds temporais da seção 4. O orçamento é pequeno porque cada trial treina e registra um run completo no MLflow, dentro da `dag_treino`. Entre os dois modelos otimizados, decide o PR-AUC na validação de 2023, que nenhuma busca viu.
+
+### 17.6 Indicadores do Projeto 6 e a rota `/indicadores`
+
+A aba 1 do dashboard pede indicadores do Projeto 6. A `dag_ingestao_preparo` grava a tabela `indicadores_ano` (volume, acidentes com vítima, atropelamentos com vítima e usuários vulneráveis envolvidos, por ano), e a API expõe essa tabela em `GET /indicadores`, uma rota a mais em relação à seção 10.

@@ -141,7 +141,7 @@ def montar_features(acidentes: pd.DataFrame, locais: list[str],
         pd.MultiIndex.from_arrays([f["bairro"], tri_da_linha])).fillna(0).to_numpy()
 
     # Telemetria do ESP32/simulador no trimestre da linha; nula onde não houve passagem. Não entra
-    # no modelo desta fase: não cobre nenhum trimestre de treino (docs-am/decisoes.md).
+    # no modelo desta fase: não cobre nenhum trimestre de treino (ARCHITECTURE.md, seção 17.4).
     if telemetria is not None and len(telemetria):
         tri_tel = pd.to_datetime(telemetria["momento"], utc=True).dt.tz_convert(None).dt.to_period("Q")
         agregado = telemetria.groupby([telemetria["local_id"], tri_tel.rename("tri")]).agg(**TELEMETRIA)

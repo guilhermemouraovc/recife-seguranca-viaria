@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 # Corte em 2021Q1: primeiro trimestre com a janela de histórico de 4 trimestres inteira depois da
-# quebra de série de 2020Q2 (docs-am/decisoes.md, D06).
+# quebra de série de 2020Q2 (ARCHITECTURE.md, seção 17.1).
 PERIODOS = {
     "treino": ("2021Q1", "2022Q4"),
     "validacao": ("2023Q1", "2023Q4"),

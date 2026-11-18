@@ -28,7 +28,7 @@ MAX_CATEGORIAS, MAX_BAIRROS = 15, 21
 
 def colunas_do_modelo(features: pd.DataFrame) -> tuple[list[str], list[str]]:
     """(numéricas, categóricas) que entram no modelo. Telemetria (tel_*) fica de fora nesta
-    fase: não cobre nenhum trimestre de treino (docs-am/decisoes.md)."""
+    fase: não cobre nenhum trimestre de treino (ARCHITECTURE.md, seção 17.4)."""
     fora = set(IDENTIFICADORES) | set(ALVOS) | set(CATEGORICAS) | {BAIRRO}
     numericas = [c for c in features if c not in fora and not c.startswith("tel_")]
     return numericas, [c for c in CATEGORICAS if c in features]

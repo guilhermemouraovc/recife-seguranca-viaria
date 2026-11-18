@@ -96,7 +96,7 @@ def resumo(acidentes: pd.DataFrame, dim_local: pd.DataFrame, exclusoes: dict) ->
 
 
 def indicadores_ano(acidentes: pd.DataFrame) -> pd.DataFrame:
-    """Indicadores do Projeto 6 por ano, para a aba 1 do dashboard (docs-am/decisoes.md):
+    """Indicadores do Projeto 6 por ano, para a aba 1 do dashboard (ARCHITECTURE.md, seção 17.6):
     volume, vítimas, atropelamentos com vítima e usuários vulneráveis envolvidos."""
     ano = acidentes["data"].dt.year.rename("ano")
     atropelamento = (acidentes["pedestre"].fillna(0) > 0) & acidentes["com_vitima"]

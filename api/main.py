@@ -257,7 +257,7 @@ def modelo() -> list[ModeloInfo]:
 @app.get("/indicadores", response_model=list[Indicador])
 def indicadores() -> list[Indicador]:
     """Indicadores do Projeto 6 por ano (aba 1 do dashboard): volume, vítimas, atropelamentos e
-    usuários vulneráveis. Rota a mais em relação à seção 10 (docs-am/decisoes.md)."""
+    usuários vulneráveis. Rota a mais em relação à seção 10 (ARCHITECTURE.md, seção 17.6)."""
     try:
         tabela = consultar("SELECT * FROM indicadores_ano ORDER BY ano")
     except Exception as erro:
