@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Risco Viário Recife</title>
+<!-- M6: painel do MVP. Servido pela API em /painel/ (api/app/main.py).
+     Lê /trechos (contrato docs/09), detalhe.json (sql/05_painel.sql, gerado por load_postgis.sh)
+     e, na aba Módulo, a telemetria MQTT do ESP32 ao vivo (nada é gravado). -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<style>
+  :root {
+    --risco-alto: #a50f15; --risco-medio: #f07c0e; --risco-baixo: #ffd60a; --risco-borda: #2b2b2b;
+    --acento: #b8400e; --acento-escuro: #8a2c0a;
+    --fundo: #f4f3f0; --painel: #fff; --borda: #e2e0da; --texto: #1c1d1f; --texto-2: #5c5a55;
+    --topo: #1c1e22; --aviso-fundo: #fdf3d4; --aviso-borda: #e7d39a; --foco: #1c5cab;
+    --verde: #1f9d55; --amarelo: #f2b705; --vermelho: #c62828;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--texto); background: var(--fundo); }
+  a { color: var(--acento-escuro); }
+  :focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+
+  header.topo { background: var(--topo); color: #fff; display: flex; align-items: center; gap: 1rem; padding: 0 1.25rem; flex-wrap: wrap; }
+  .marca { display: flex; align-items: center; gap: .6rem; font-weight: 700; font-size: 1.1rem; padding: .9rem 0; }
+  .selo { font: 600 .7rem/1 var(--mono); letter-spacing: .04em; background: #3a3d44; color: #d6d6d6; padding: .3rem .45rem; border-radius: 4px; }
+  nav { margin-left: auto; display: flex; gap: .25rem; overflow-x: auto; }
+  nav a { color: #b9bbc0; text-decoration: none; padding: 1rem .8rem; border-bottom: 3px solid transparent; white-space: nowrap; }
+  nav a[aria-current="page"] { color: #fff; font-weight: 700; border-color: #e8833a; }
+  .faixa-aviso { background: var(--aviso-fundo); border-bottom: 1px solid var(--aviso-borda); padding: .7rem 1.25rem; color: #4d3b05; }
+  #aviso-exemplo { background: #ffe0dc; border-bottom: 2px solid var(--vermelho); padding: .6rem 1.25rem; font-weight: 600; }
+
+  main { max-width: 1400px; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
+  section[hidden], [hidden] { display: none !important; }
+  h1 { font-size: 2rem; margin: 0 0 .25rem; letter-spacing: -.01em; }
+  h2 { font-size: 1.1rem; margin: 0 0 .2rem; }
+  .sub { color: var(--texto-2); margin: 0; }
+  .cartao { background: var(--painel); border: 1px solid var(--borda); border-radius: 10px; padding: 1.1rem 1.25rem; min-width: 0; }
+  .cartao .sub { font-size: .9rem; margin-bottom: .9rem; }
+  .grade2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; margin-top: 1.25rem; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  .cabeca { display: flex; flex-wrap: wrap; gap: 1rem 2.5rem; align-items: flex-end; justify-content: space-between; }
+  .kpis-topo { display: flex; gap: 2.5rem; }
+  .kpi-topo span { display: block; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); }
+  .kpi-topo strong { font: 700 2.1rem/1.1 var(--mono); }
+
+  .filtros { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: 1.25rem; padding: .8rem 1.1rem; }
+  .filtros .rot { color: var(--texto-2); margin-right: .25rem; }
+  .pilula { font: inherit; border: 1px solid var(--borda); background: #fff; border-radius: 999px; padding: .45rem 1rem; cursor: pointer; color: var(--texto); }
+  .pilula[aria-pressed="true"] { background: var(--topo); color: #fff; border-color: var(--topo); }
+
+  #mapa, #mapa-modulo { height: 560px; border-radius: 8px; border: 1px solid var(--borda); }
+  #mapa-modulo { height: 420px; }
+  .legenda-mapa { display: flex; gap: 1.2rem; flex-wrap: wrap; margin-top: .6rem; font-size: .85rem; color: var(--texto-2); }
+  .bolinha { width: .8rem; height: .8rem; border-radius: 50%; display: inline-block; border: 1.5px solid var(--risco-borda); vertical-align: -1px; margin-right: .3rem; }
+  .marcador { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: #fff; font: 700 .8rem var(--mono);
+              border: 2px solid #fff; box-shadow: 0 0 0 1.5px var(--risco-borda); }
+  .marcador.escuro { color: #1c1d1f; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); padding: .5rem .4rem; border-bottom: 1px solid var(--borda); }
+  td { padding: .65rem .4rem; border-bottom: 1px solid #efede8; vertical-align: middle; }
+  th.n, td.n { text-align: right; }
+  #ranking tr { cursor: pointer; }
+  #ranking tr:hover td { background: #faf9f6; }
+  .trecho-nome { font-weight: 600; }
+  .trecho-nome a { color: inherit; text-decoration: none; }
+  .trecho-nome a:hover { text-decoration: underline; }
+  .bairro { font-size: .85rem; color: var(--texto-2); }
+  .barra { height: 8px; border-radius: 4px; background: #f0ebe5; min-width: 80px; }
+  .barra > i { display: block; height: 100%; border-radius: 4px; background: var(--acento); }
+  .rodape-tab { font-size: .85rem; color: var(--texto-2); margin: .8rem 0 0; }
+
+  .voltar { display: inline-block; margin-bottom: 1rem; text-decoration: none; }
+  .sobretitulo { font: 700 .8rem var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--acento); }
+  .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; margin-top: 1.25rem; }
+  .kpi span { font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); }
+  .kpi strong { display: block; font: 700 2rem/1.2 var(--mono); margin: .2rem 0; }
+  .kpi small { color: var(--texto-2); }
+
+  .calor { display: grid; grid-template-columns: 3rem repeat(4, minmax(0, 1fr)); gap: 4px; font-size: .9rem; }
+  .calor .h { text-align: center; color: var(--texto-2); padding-bottom: .25rem; }
+  .calor .d { font-weight: 600; align-self: center; }
+  .calor .c { text-align: center; padding: .6rem 0; border-radius: 4px; font-family: var(--mono); }
+  .escala { display: flex; align-items: center; gap: 4px; font-size: .8rem; color: var(--texto-2); margin-top: .8rem; }
+  .escala i { width: 1.6rem; height: .8rem; border-radius: 2px; }
+
+  .anos { display: flex; align-items: flex-end; gap: 6px; height: 220px; padding-top: 1.2rem; }
+  .ano { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; min-width: 0; }
+  .ano .v { font: .75rem var(--mono); color: var(--texto-2); }
+  .ano .col { width: 100%; max-width: 44px; background: #e3e2dd; border-radius: 3px 3px 0 0; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+  .ano .col i { background: var(--acento-escuro); display: block; }
+  .ano .a { font-size: .75rem; color: var(--texto-2); margin-top: .3rem; }
+
+  .linhas-barra { display: grid; grid-template-columns: 6rem 1fr 3rem; gap: .7rem 1rem; align-items: center; }
+  .linhas-barra .barra { height: 10px; }
+  dl.vel { display: grid; grid-template-columns: 1fr auto; gap: .6rem 1rem; margin: 0; }
+  dl.vel dd { margin: 0; font-family: var(--mono); font-weight: 600; text-align: right; }
+  dl.vel dd.pendente { font-family: inherit; font-weight: 400; color: var(--texto-2); }
+
+  .passos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+  .passos b { display: block; font: 600 .85rem var(--mono); color: var(--acento); }
+  .pesos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin: .8rem 0; }
+  .pesos div { border: 1px solid var(--borda); border-radius: 8px; padding: .8rem 1rem; display: flex; justify-content: space-between; align-items: center; }
+  .pesos strong { font: 700 1.6rem var(--mono); color: var(--acento-escuro); }
+  pre.formula { background: var(--fundo); border-radius: 6px; padding: .8rem 1rem; margin: 0; font: .95rem var(--mono); overflow-x: auto; }
+  .etiqueta { display: inline-block; padding: .15rem .5rem; border-radius: 4px; font-size: .85rem; }
+  .etiqueta.sim { background: #dcf1e3; color: #145c33; }
+  .etiqueta.nao { background: #f6e0dc; color: #7a1d12; }
+  .ressalvas { list-style: none; padding: 0; margin: .8rem 0 0; display: grid; gap: .6rem; }
+  .ressalvas li { background: #fff; border: 1px solid var(--borda); border-radius: 8px; padding: .8rem 1rem; }
+  .metodologia { max-width: 1100px; margin: 0 auto; }
+
+  /* Módulo veicular */
+  .modulo-topo { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 1.25rem; margin-top: 1.25rem; }
+  .semaforo { display: flex; flex-direction: column; align-items: center; gap: .7rem; background: #23262b; border-radius: 14px; padding: 1.2rem; }
+  .semaforo i { width: 64px; height: 64px; border-radius: 50%; background: #3a3d44; transition: background .2s, box-shadow .2s; }
+  .semaforo i.on.verde { background: var(--verde); box-shadow: 0 0 22px var(--verde); }
+  .semaforo i.on.amarelo { background: var(--amarelo); box-shadow: 0 0 22px var(--amarelo); }
+  .semaforo i.on.vermelho { background: var(--vermelho); box-shadow: 0 0 22px var(--vermelho); }
+  .semaforo b { color: #fff; font: 700 1.1rem var(--mono); text-transform: uppercase; }
+  .leituras { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+  .conexao { display: inline-flex; align-items: center; gap: .4rem; font-size: .9rem; }
+  .conexao::before { content: ""; width: .6rem; height: .6rem; border-radius: 50%; background: #9a9a9a; }
+  .conexao.ok::before { background: var(--verde); }
+  .conexao.erro::before { background: var(--vermelho); }
+  #log { font: .82rem/1.5 var(--mono); max-height: 260px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+  #log li { padding: .25rem 0; border-bottom: 1px solid #efede8; overflow-wrap: anywhere; }
+  .tag-sim { background: #e8e4ff; color: #3b2a8a; }
+  .config-mqtt { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .8rem; font-size: .85rem; }
+  .config-mqtt input { font: .85rem var(--mono); padding: .35rem .5rem; border: 1px solid var(--borda); border-radius: 6px; min-width: 0; flex: 1 1 260px; }
+  .config-mqtt button { font: inherit; padding: .35rem .8rem; border: 1px solid var(--topo); background: var(--topo); color: #fff; border-radius: 6px; cursor: pointer; }
+
+  footer { max-width: 1400px; margin: 0 auto; padding: 0 1.25rem 2rem; font-size: .8rem; color: var(--texto-2); }
+
+  @media (max-width: 1000px) {
+    .grade2, .modulo-topo { grid-template-columns: minmax(0, 1fr); }
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .passos, .pesos, .leituras { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #mapa { height: 420px; }
+  }
+  @media (max-width: 560px) {
+    h1 { font-size: 1.5rem; }
+    .kpis, .passos, .pesos { grid-template-columns: minmax(0, 1fr); }
+    .kpis-topo { gap: 1.5rem; }
+    .col-opc { display: none; }
+  }
+</style>
+</head>
+<body>
+<header class="topo">
+  <div class="marca">
+    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><path d="M13 2 3 24M13 2l10 22M13 9v3M13 16v3" stroke="#e8833a" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+    Risco Viário Recife <span class="selo">MVP</span>
+  </div>
+  <nav aria-label="Seções">
+    <a href="#mapa">Mapa de risco</a>
+    <a href="#trecho">Detalhe do trecho</a>
+    <a href="#modulo">Módulo veicular</a>
+    <a href="#metodologia">Metodologia</a>
+  </nav>
+</header>
+<div class="faixa-aviso">
+  Atropelamentos registrados nos chamados da CTTU (dados abertos), não os números oficiais dos Relatórios
+  Anuais. 2015 só a partir de junho. Pontos localizados por trecho de rua, não pela esquina exata.
+  <a href="#metodologia">Ver ressalvas</a>
+</div>
+<div id="aviso-exemplo" role="alert" hidden>
+  Atenção: a API está servindo <strong>dados de exemplo</strong> (trechos inventados para teste), não o
+  resultado do modelo. Gere data/contrato/trechos.json com scripts/load_postgis.sh.
+</div>
+
+<main>
+  <!-- ============ MAPA ============ -->
+  <section id="v-mapa" aria-labelledby="t-mapa">
+    <div class="cabeca">
+      <div>
+        <h1 id="t-mapa">Onde o atropelamento se repete</h1>
+        <p class="sub">Trechos com atropelamentos recorrentes, ordenados por score (frequência × gravidade × recência).</p>
+      </div>
+      <div class="kpis-topo">
+        <div class="kpi-topo"><span>Trechos de risco</span><strong id="k-trechos">–</strong></div>
+        <div class="kpi-topo"><span>Período</span><strong>2015–2024</strong></div>
+      </div>
+    </div>
+
+    <div class="cartao filtros" role="group" aria-label="Filtro de horário">
+      <span class="rot">Horário</span>
+      <button class="pilula" data-faixa="" aria-pressed="true">Todos</button>
+      <button class="pilula" data-faixa="0" aria-pressed="false">0–6h</button>
+      <button class="pilula" data-faixa="6" aria-pressed="false">6–12h</button>
+      <button class="pilula" data-faixa="12" aria-pressed="false">12–18h</button>
+      <button class="pilula" data-faixa="18" aria-pressed="false">18–24h</button>
+    </div>
+
+    <div class="grade2">
+      <div class="cartao">
+        <h2>Mapa</h2>
+        <div id="mapa" role="region" aria-label="Mapa dos trechos de risco"></div>
+        <div class="legenda-mapa">
+          <span><span class="bolinha" style="background:var(--risco-alto)"></span>risco alto</span>
+          <span><span class="bolinha" style="background:var(--risco-medio)"></span>médio</span>
+          <span><span class="bolinha" style="background:var(--risco-baixo)"></span>baixo</span>
+          <span>número = posição no ranking · círculo = raio do alerta no módulo</span>
+        </div>
+      </div>
+      <div class="cartao">
+        <h2>Ranking de trechos</h2>
+        <table>
+          <thead><tr><th>#</th><th>Trecho</th><th class="n">Atrop.</th><th class="n">Óbitos</th><th class="col-opc">Score</th><th class="n"></th></tr></thead>
+          <tbody id="ranking"></tbody>
+        </table>
+        <p class="rodape-tab" id="rodape-ranking"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DETALHE ============ -->
+  <section id="v-trecho" aria-labelledby="t-trecho" hidden>
+    <a class="voltar" href="#mapa">‹ Voltar ao ranking</a>
+    <div class="sobretitulo" id="d-pos"></div>
+    <h1 id="t-trecho"></h1>
+    <p class="sub" id="d-sub"></p>
+    <div id="d-conteudo">
+      <div class="kpis" id="d-kpis"></div>
+      <div class="grade2">
+        <div class="cartao">
+          <h2>Quando acontece</h2>
+          <p class="sub" id="d-calor-sub"></p>
+          <div class="calor" id="d-calor"></div>
+          <div class="escala">menos <i style="background:#fbe9e2"></i><i style="background:#f4c4a8"></i><i style="background:#ec9a6e"></i><i style="background:#c4420f"></i><i style="background:#7f2a10"></i> mais</div>
+        </div>
+        <div class="cartao">
+          <h2>Ano a ano</h2>
+          <p class="sub">Barra = atropelamentos no trecho; parte escura = com vítima. A queda a partir de 2020 é mudança no registro, não no trânsito.</p>
+          <div class="anos" id="d-anos"></div>
+          <div class="escala"><i style="background:#e3e2dd"></i> sem vítima <i style="background:var(--acento-escuro)"></i> com vítima · * 2015: só jun–dez</div>
+        </div>
+        <div class="cartao">
+          <h2>Quem estava envolvido</h2>
+          <p class="sub">Participante mais vulnerável de cada sinistro. Envolvido não quer dizer vítima: a base não diz quem se feriu.</p>
+          <div class="linhas-barra" id="d-envolvidos"></div>
+        </div>
+        <div class="cartao">
+          <h2>Velocidade e alerta no módulo</h2>
+          <p class="sub">O que o módulo veicular faz ao entrar neste trecho (contrato docs/09).</p>
+          <dl class="vel" id="d-vel"></dl>
+        </div>
+      </div>
+    </div>
+    <p id="d-vazio" class="sub" hidden>Escolha um trecho no <a href="#mapa">ranking</a>.</p>
+  </section>
+
+  <!-- ============ MÓDULO ============ -->
+  <section id="v-modulo" aria-labelledby="t-modulo" hidden>
+    <div class="cabeca">
+      <div>
+        <h1 id="t-modulo">Módulo veicular ao vivo</h1>
+        <p class="sub">ESP32 + CAN + GPS: alerta o motorista quando passa num trecho de risco acima da velocidade segura.
+          Telemetria recebida via MQTT; nada é gravado por este painel.</p>
+      </div>
+      <span class="conexao" id="m-conexao" aria-live="polite">desconectado</span>
+    </div>
+
+    <div class="modulo-topo">
+      <div class="semaforo" aria-live="polite" aria-label="Nível de alerta atual">
+        <i class="vermelho"></i><i class="amarelo"></i><i class="verde"></i>
+        <b id="m-nivel">aguardando</b>
+      </div>
+      <div style="display:grid; gap:1.25rem; min-width:0">
+        <div class="leituras">
+          <div class="cartao kpi"><span>Velocidade</span><strong id="m-vel">–</strong><small id="m-fonte">km/h</small></div>
+          <div class="cartao kpi"><span>Trecho</span><strong id="m-trecho" style="font-size:1.2rem">–</strong><small id="m-trecho-sub">fora de trecho de risco</small></div>
+          <div class="cartao kpi"><span>Vel. segura</span><strong id="m-segura">–</strong><small>km/h no trecho</small></div>
+          <div class="cartao kpi"><span>Última msg</span><strong id="m-ultima" style="font-size:1.2rem">–</strong><small id="m-modulo">nenhum módulo</small></div>
+        </div>
+        <div class="cartao">
+          <h2>Mudanças de alerta</h2>
+          <ul id="log"><li>Nenhuma mensagem ainda. Rode a simulação no Wokwi ou ligue o módulo.</li></ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="grade2">
+      <div class="cartao">
+        <h2>Posição</h2>
+        <p class="sub">Trechos de risco (mesmos do mapa) e o trajeto recebido nesta sessão.</p>
+        <div id="mapa-modulo" role="region" aria-label="Mapa com a posição do módulo"></div>
+      </div>
+      <div class="cartao">
+        <h2>Como o módulo decide</h2>
+        <dl class="vel">
+          <dt><span class="bolinha" style="background:var(--verde)"></span>Verde</dt><dd class="pendente">fora de trecho de risco (ou fora do horário dele)</dd>
+          <dt><span class="bolinha" style="background:var(--amarelo)"></span>Amarelo</dt><dd class="pendente">dentro do trecho, até a velocidade segura</dd>
+          <dt><span class="bolinha" style="background:var(--vermelho)"></span>Vermelho</dt><dd class="pendente">dentro do trecho, acima da velocidade segura (LED + bipe)</dd>
+        </dl>
+        <h2 style="margin-top:1.2rem">Conexão MQTT</h2>
+        <p class="sub">Broker público, sem senha: qualquer um pode publicar nesses tópicos. Use só para demonstração.</p>
+        <div class="config-mqtt">
+          <input id="m-broker" aria-label="Endereço do broker MQTT (WebSocket)" value="wss://broker.hivemq.com:8884/mqtt">
+          <button id="m-conectar" type="button">Conectar</button>
+        </div>
+        <p class="rodape-tab">Tópicos: <code>p6g3/modulo/+/telemetria|alerta|status</code> (docs/09) e
+          <code>g3/veiculo/telemetria|alerta</code> (sketch do Wokwi do grupo).
+          Dado com <code>fonte_vel = sim</code> ou do Wokwi é bancada, não medição de rua.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ METODOLOGIA ============ -->
+  <section id="v-metodologia" class="metodologia" aria-labelledby="t-met" hidden>
+    <h1 id="t-met">Como o score é calculado</h1>
+    <p class="sub">O score mede onde o atropelamento se repete. Ele não prevê o próximo sinistro e não substitui os números oficiais da CTTU.</p>
+    <div class="passos">
+      <div class="cartao"><b>01</b><h2>Localizar</h2><p class="sub">Cada chamado ganha um ponto: semáforo, número da casa ou trecho da rua no bairro informado.</p></div>
+      <div class="cartao"><b>02</b><h2>Agrupar</h2><p class="sub">Atropelamentos a até 100 m uns dos outros formam um trecho, com pelo menos 5 sinistros (DBSCAN).</p></div>
+      <div class="cartao"><b>03</b><h2>Pesar</h2><p class="sub">Cada sinistro pesa pela gravidade e perde peso com o tempo.</p></div>
+      <div class="cartao"><b>04</b><h2>Ordenar</h2><p class="sub">A soma dos pesos é o score. Os 10% de maior score viram trechos de risco e vão para o módulo.</p></div>
+    </div>
+    <div class="cartao" style="margin-top:1.25rem">
+      <h2>Peso por gravidade</h2>
+      <p class="sub">Unidade Padrão de Severidade (UPS), DENATRAN. O peso de cada sinistro cai pela metade a cada 2 anos.</p>
+      <div class="pesos">
+        <div>Sem vítima <strong>1</strong></div><div>Com feridos <strong>4</strong></div>
+        <div>Atropelamento com vítima <strong>6</strong></div><div>Com morte <strong>13</strong></div>
+      </div>
+      <pre class="formula">score = Σ UPS × 0,5^(idade em anos ÷ 2)      # no painel: dividido pelo maior score (0–1)</pre>
+    </div>
+    <div class="cartao" style="margin-top:1.25rem">
+      <h2>Validação</h2>
+      <p class="sub">Locais onde a CTTU interveio deveriam aparecer como risco usando só os dados de antes da intervenção (docs/11).</p>
+      <table>
+        <thead><tr><th>Local</th><th>Intervenção</th><th>Resultado</th></tr></thead>
+        <tbody>
+          <tr><td>Largo Dom Luiz (Morro da Conceição)</td><td class="num">2020 (aprox.)</td><td><span class="etiqueta sim">aparece: 4º de 42, a 411 m</span></td></tr>
+          <tr><td>Rua Zeferino Agra (Arruda)</td><td class="num">jun/2023</td><td><span class="etiqueta nao">nenhum trecho a até 500 m</span></td></tr>
+          <tr><td>Praça Farias Neves (Dois Irmãos)</td><td class="num">ago/2023</td><td><span class="etiqueta nao">nenhum trecho a até 500 m</span></td></tr>
+        </tbody>
+      </table>
+      <p class="rodape-tab">Três locais é amostra muito pequena: isso não comprova que o modelo acerta, só que não contradiz o caso mais antigo.</p>
+    </div>
+    <h2 style="margin-top:1.5rem">Ressalvas dos dados</h2>
+    <ul class="ressalvas">
+      <li><b>Chamados, não estatística oficial.</b> Os números podem divergir dos Relatórios Anuais de Segurança Viária, que usam registros dos agentes de trânsito.</li>
+      <li><b>2015 começa em junho.</b> Qualquer total anual de 2015 está subestimado.</li>
+      <li><b>Registro muda a partir de 2020.</b> O volume de chamados cai muito, e os sem vítima quase somem em 2021. Comparar anos com cuidado.</li>
+      <li><b>Ponto aproximado.</b> A localização é um trecho da rua dentro do bairro, não a esquina. Por isso o raio do alerta tem no mínimo 200 m.</li>
+      <li><b>Envolvido não é vítima.</b> A base conta pedestres, motos e ciclistas envolvidos, mas não diz quem se feriu.</li>
+      <li><b>Dez/2025 suspeito.</b> Chamados do arquivo de 2024 com data de dezembro de 2025 ficam fora do score; 2025 é preliminar.</li>
+      <li><b>Bancada não é rua.</b> Velocidade de potenciômetro (Wokwi) aparece como simulada e não entra em análise.</li>
+    </ul>
+  </section>
+</main>
+<footer>Fonte: Portal de Dados Abertos do Recife (CTTU), licença ODbL. Localização via OpenStreetMap. <span id="meta"></span></footer>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = n => n.toLocaleString("pt-BR");
+const css = getComputedStyle(document.documentElement);
+const COR = Object.fromEntries(["alto", "medio", "baixo"].map(r => [r, css.getPropertyValue(`--risco-${r}`).trim()]));
+const ROTULO = { alto: "alto", medio: "médio", baixo: "baixo" };
+const DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+const FAIXAS = ["0–6h", "6–12h", "12–18h", "18–24h"];
+
+let trechos = [], fonte = null, detalhe = { trechos: {} }, faixa = "";
+
+// "AV CAXANGA · CAXANGÁ" -> ["Av Caxanga", "Caxangá"]
+const titulo = s => s.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()).replace(/\b(De|Da|Do|Dos|Das|E)\b/g, w => w.toLowerCase());
+const partes = t => { const [via, bairro = ""] = t.nome.split(" · "); return [titulo(via), titulo(bairro)]; };
+
+// [6..11, 18..23] -> "6–12h, 18–24h"
+function faixasTxt(horas) {
+  if (!horas.length || horas.length === 24) return "dia todo";
+  const hs = [...horas].sort((a, b) => a - b), out = [];
+  let ini = hs[0], ant = hs[0];
+  for (const h of hs.slice(1).concat([null])) {
+    if (h === ant + 1) { ant = h; continue; }
+    out.push(`${ini}–${ant + 1}h`); ini = ant = h;
+  }
+  return out.join(", ");
+}
+const limites = () => L.latLngBounds(trechos.map(t => [t.lat, t.lon])).pad(0.1);
+const ativoNaFaixa = (t, f) => f === "" || !t.horas.length || t.horas.some(h => h >= +f && h < +f + 6);
+
+// ---------- mapa de risco ----------
+const mapa = L.map("mapa").setView([-8.05, -34.92], 12);
+const tiles = () => L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · chamados CTTU'
+});
+tiles().addTo(mapa);
+const camada = L.layerGroup().addTo(mapa);
+
+function renderMapa() {
+  const lista = trechos.filter(t => ativoNaFaixa(t, faixa));
+  camada.clearLayers();
+  lista.forEach(t => {
+    const pos = trechos.indexOf(t) + 1, [via, bairro] = partes(t);
+    L.circle([t.lat, t.lon], { radius: t.raio_m, color: COR[t.risco], weight: 1.5, fillOpacity: .15 }).addTo(camada);
+    L.marker([t.lat, t.lon], { icon: L.divIcon({ className: "", iconSize: [28, 28],
+        html: `<div class="marcador ${t.risco === "baixo" ? "escuro" : ""}" style="background:${COR[t.risco]}">${pos}</div>` }),
+      title: `${pos}. ${via}`, keyboard: true })
+      .bindPopup(`<b>${pos}. ${esc(via)}</b><br>${esc(bairro)}<br>risco ${ROTULO[t.risco]} · ${faixasTxt(t.horas)}<br><a href="#trecho/${esc(t.id)}">ver detalhe ›</a>`)
+      .addTo(camada);
+  });
+  const maxScore = Math.max(...trechos.map(t => t.score), 1e-9);
+  $("#ranking").innerHTML = lista.map(t => {
+    const pos = trechos.indexOf(t) + 1, [via, bairro] = partes(t), d = detalhe.trechos[t.id];
+    return `<tr data-id="${esc(t.id)}">
+      <td class="num">${pos}</td>
+      <td><div class="trecho-nome"><a href="#trecho/${esc(t.id)}"><span class="bolinha" style="background:${COR[t.risco]}"></span>${esc(via)}</a></div>
+          <div class="bairro">${esc(bairro)} · ${faixasTxt(t.horas)}</div></td>
+      <td class="n num">${d ? fmt(d.n_sinistros) : "–"}</td>
+      <td class="n num">${d ? d.n_obitos : "–"}</td>
+      <td class="col-opc"><div class="barra"><i style="width:${100 * t.score / maxScore}%"></i></div></td>
+      <td class="n num">${t.score.toFixed(2)}</td></tr>`;
+  }).join("") || `<tr><td colspan="6">Nenhum trecho de risco nesta faixa.</td></tr>`;
+  $("#rodape-ranking").textContent = `Mostrando ${lista.length} de ${trechos.length} trechos de risco` +
+    (detalhe.n_clusters ? ` (top 10% de ${detalhe.n_clusters} agrupamentos de atropelamento)` : "") +
+    `. Score com dados até 31/12/2024, relativo ao 1º colocado.`;
+}
+
+document.querySelectorAll(".pilula").forEach(b => b.addEventListener("click", () => {
+  faixa = b.dataset.faixa;
+  document.querySelectorAll(".pilula").forEach(x => x.setAttribute("aria-pressed", x === b));
+  renderMapa();
+}));
+$("#ranking").addEventListener("click", e => {
+  const tr = e.target.closest("tr[data-id]");
+  if (tr && !e.target.closest("a")) location.hash = `trecho/${tr.dataset.id}`;
+});
+
+// ---------- detalhe ----------
+const CALOR = ["#fbe9e2", "#f4c4a8", "#ec9a6e", "#c4420f", "#7f2a10"];
+function renderTrecho(id) {
+  const t = trechos.find(x => x.id === id) || trechos[0];
+  $("#d-conteudo").hidden = $("#d-pos").hidden = !t;
+  $("#d-vazio").hidden = !!t;
+  if (!t) { $("#t-trecho").textContent = "Detalhe do trecho"; $("#d-sub").textContent = ""; return; }
+  const pos = trechos.indexOf(t) + 1, [via, bairro] = partes(t), d = detalhe.trechos[t.id];
+  $("#d-pos").textContent = `${pos}º de ${trechos.length} trechos · risco ${ROTULO[t.risco]}`;
+  $("#t-trecho").textContent = via;
+  $("#d-sub").textContent = `${bairro} e entorno · atropelamentos num raio de ~${t.raio_m} m (chamados CTTU, 2015–2024)`;
+
+  const vulner = d ? d.envolvidos.pedestre + d.envolvidos.ciclista + d.envolvidos.moto : 0;
+  const kpis = [
+    ["Score", t.score.toFixed(2), pos === 1 ? "maior da cidade" : "relativo ao 1º (1,00)"],
+    ["Atropelamentos", d ? fmt(d.n_sinistros) : "–", "chamados 2015–2024"],
+    ["Com vítima", d ? fmt(d.n_com_vitima) : "–", d ? `${Math.round(100 * d.n_com_vitima / d.n_sinistros)}% do total` : ""],
+    ["Óbitos", d ? d.n_obitos : "–", "sinistros com morte"],
+    ["Horário de risco", faixasTxt(t.horas), "faixas com ≥ 25% dos casos"],
+  ];
+  $("#d-kpis").innerHTML = kpis.map(([k, v, s]) => `<div class="cartao kpi"><span>${k}</span><strong${String(v).length > 8 ? ' style="font-size:1.3rem"' : ""}>${esc(v)}</strong><small>${esc(s)}</small></div>`).join("");
+
+  if (!d) { $("#d-calor").innerHTML = $("#d-anos").innerHTML = $("#d-envolvidos").innerHTML = "<p class='sub'>Sem detalhe para este trecho (rode scripts/load_postgis.sh).</p>"; }
+  else {
+    const max = Math.max(...d.semana.flat(), 1);
+    let pico = [0, 0, -1];
+    d.semana.forEach((l, i) => l.forEach((n, j) => { if (n > pico[2]) pico = [i, j, n]; }));
+    $("#d-calor-sub").textContent = `Atropelamentos por dia da semana e faixa horária. Pico: ${DIAS[pico[0]].toLowerCase()}, ${FAIXAS[pico[1]]} (${pico[2]}).` +
+      (d.sem_hora ? ` ${d.sem_hora} sem hora registrada ficam de fora.` : "");
+    $("#d-calor").innerHTML = `<span></span>${FAIXAS.map(f => `<span class="h">${f}</span>`).join("")}` +
+      d.semana.map((l, i) => `<span class="d">${DIAS[i]}</span>` + l.map(n => {
+        const k = n ? Math.min(4, Math.ceil(5 * n / max) - 1) : 0;
+        return `<span class="c" style="background:${CALOR[k]};color:${k >= 3 ? "#fff" : "inherit"}">${n}</span>`;
+      }).join("")).join("");
+
+    const maxAno = Math.max(...d.por_ano.map(a => a[1]), 1);
+    $("#d-anos").innerHTML = d.por_ano.map(([a, tot, cv]) => `<div class="ano" title="${a}: ${tot} atropelamentos, ${cv} com vítima">
+      <span class="v">${tot}</span><div class="col" style="height:${85 * tot / maxAno}%"><i style="height:${100 * cv / tot}%"></i></div>
+      <span class="a">${a}${a === 2015 ? "*" : ""}</span></div>`).join("");
+
+    const env = [["Pedestre", d.envolvidos.pedestre], ["Moto", d.envolvidos.moto], ["Ciclista", d.envolvidos.ciclista], ["Nenhum", d.envolvidos.nenhum]];
+    $("#d-envolvidos").innerHTML = env.map(([k, n]) => `<span>${k}</span>
+      <div class="barra"><i style="width:${100 * n / d.n_sinistros}%;${k === "Nenhum" ? "background:#b9b8b2" : ""}"></i></div><span class="num" style="text-align:right">${n}</span>`).join("");
+  }
+  $("#d-vel").innerHTML = `
+    <dt>Velocidade segura usada no alerta</dt><dd>${t.vel_segura} km/h</dd>
+    <dt>Critério</dt><dd class="pendente">${t.vel_segura === 30 ? "≥ 25% com pedestre, ciclista ou moto (OMS: 30 km/h)" : "conflito entre veículos (OMS: 50 km/h)"}</dd>
+    <dt>Raio do alerta</dt><dd>${t.raio_m} m</dd>
+    <dt>Horário em que o alerta liga</dt><dd>${faixasTxt(t.horas)}</dd>
+    <dt>Limite sinalizado na via</dt><dd class="pendente">[a levantar]</dd>
+    <dt>% de veículos acima da vel. segura</dt><dd class="pendente">[base de velocidade ainda não baixada]</dd>`;
+}
+
+// ---------- módulo veicular (MQTT) ----------
+const NIVEL = { SEGURO: "verde", RISCO: "amarelo", CRITICO: "vermelho", verde: "verde", amarelo: "amarelo", vermelho: "vermelho" };
+let mapaMod, marcaMod, rastro, cliente, logVazio = true, ultimoNivel = {};
+
+function iniciarMapaModulo() {
+  if (mapaMod) return mapaMod.invalidateSize();
+  mapaMod = L.map("mapa-modulo").setView([-8.05, -34.92], 12);
+  tiles().addTo(mapaMod);
+  trechos.forEach(t => L.circle([t.lat, t.lon], { radius: t.raio_m, color: COR[t.risco], weight: 1.5, fillOpacity: .2 })
+    .bindTooltip(partes(t)[0]).addTo(mapaMod));
+  rastro = L.polyline([], { color: "#1c5cab", weight: 3 }).addTo(mapaMod);
+  if (trechos.length) mapaMod.fitBounds(limites(), { padding: [20, 20] });
+}
+
+function registrar(txt) {
+  if (logVazio) { $("#log").innerHTML = ""; logVazio = false; }
+  const li = document.createElement("li");
+  li.textContent = `${new Date().toLocaleTimeString("pt-BR")}  ${txt}`;
+  $("#log").prepend(li);
+  while ($("#log").children.length > 50) $("#log").lastChild.remove();
+}
+
+function mostrarNivel(nivel, modulo) {
+  document.querySelectorAll(".semaforo i").forEach(i => i.classList.toggle("on", i.classList.contains(nivel)));
+  $("#m-nivel").textContent = nivel || "aguardando";
+  if (nivel && ultimoNivel[modulo] !== nivel) registrar(`${modulo}: alerta ${nivel}`);
+  ultimoNivel[modulo] = nivel;
+}
+
+// Normaliza os dois formatos: docs/09 (p6g3/modulo/<id>/...) e sketch do grupo (g3/veiculo/...).
+function aoReceber(topico, buf) {
+  const txt = buf.toString(), partesT = topico.split("/");
+  const modulo = topico.startsWith("p6g3/") ? partesT[2] : "wokwi-g3";
+  const tipo = partesT[partesT.length - 1];
+  if (tipo === "status") { registrar(`${modulo}: ${txt.slice(0, 40)}`); return; }
+  let m;
+  try { m = JSON.parse(txt); } catch { m = { alerta: txt.trim() }; }
+  if (typeof m !== "object" || m === null) return;
+  const nivel = NIVEL[m.alerta];
+  if (nivel) mostrarNivel(nivel, modulo);
+  if (tipo !== "telemetria") return;
+
+  const simulado = modulo === "wokwi-g3" || m.fonte_vel === "sim";
+  if (Number.isFinite(+m.vel)) $("#m-vel").textContent = Math.round(+m.vel);
+  $("#m-fonte").innerHTML = `km/h · ${esc(m.fonte_vel || "potenciômetro")}` + (simulado ? ' <span class="etiqueta tag-sim">simulado</span>' : "");
+  const t = trechos.find(x => x.id === m.trecho);
+  $("#m-trecho").textContent = t ? partes(t)[0] : (m.zona ? "zona de teste" : "–");
+  $("#m-trecho-sub").textContent = t ? partes(t)[1] : (m.zona ? "zona fixa do sketch Wokwi" : "fora de trecho de risco");
+  $("#m-segura").textContent = t ? t.vel_segura : (m.zona ? 40 : "–");
+  $("#m-ultima").textContent = new Date().toLocaleTimeString("pt-BR");
+  $("#m-modulo").textContent = modulo;
+  const lat = +m.lat, lon = +m.lon;
+  if (mapaMod && Number.isFinite(lat) && Number.isFinite(lon) && m.lat !== null) {
+    if (!marcaMod) marcaMod = L.circleMarker([lat, lon], { radius: 8, color: "#fff", weight: 2, fillColor: "#1c5cab", fillOpacity: 1 }).addTo(mapaMod);
+    marcaMod.setLatLng([lat, lon]);
+    rastro.addLatLng([lat, lon]);
+    if (rastro.getLatLngs().length > 600) rastro.setLatLngs(rastro.getLatLngs().slice(-600));
+  }
+}
+
+function conectar() {
+  if (cliente) cliente.end(true);
+  const url = $("#m-broker").value.trim();
+  const st = $("#m-conexao");
+  st.className = "conexao"; st.textContent = "conectando…";
+  if (!window.mqtt) { st.className = "conexao erro"; st.textContent = "biblioteca MQTT não carregou"; return; }
+  cliente = mqtt.connect(url, { clientId: "painel-g3-" + Math.random().toString(16).slice(2, 10), reconnectPeriod: 5000, connectTimeout: 8000 });
+  cliente.on("connect", () => {
+    st.className = "conexao ok"; st.textContent = `conectado · ${new URL(url).host}`;
+    cliente.subscribe(["p6g3/modulo/+/telemetria", "p6g3/modulo/+/alerta", "p6g3/modulo/+/status", "g3/veiculo/telemetria", "g3/veiculo/alerta"]);
+  });
+  cliente.on("message", aoReceber);
+  cliente.on("error", e => { st.className = "conexao erro"; st.textContent = `erro: ${e.message}`; });
+  cliente.on("offline", () => { st.className = "conexao erro"; st.textContent = "sem conexão, tentando de novo…"; });
+}
+$("#m-conectar").addEventListener("click", conectar);
+
+// ---------- rotas ----------
+function rota() {
+  const [v, id] = (location.hash.slice(1) || "mapa").split("/");
+  const visao = ["mapa", "trecho", "modulo", "metodologia"].includes(v) ? v : "mapa";
+  document.querySelectorAll("main > section").forEach(s => s.hidden = s.id !== `v-${visao}`);
+  document.querySelectorAll("nav a").forEach(a => a.getAttribute("href") === `#${visao}`
+    ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+  if (visao === "mapa") setTimeout(() => mapa.invalidateSize());
+  if (visao === "trecho") renderTrecho(id);
+  if (visao === "modulo") { iniciarMapaModulo(); if (!cliente) conectar(); }
+  window.scrollTo(0, 0);
+}
+window.addEventListener("hashchange", rota);
+
+// ---------- carga ----------
+(async () => {
+  try {
+    const r = await fetch("/trechos");
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const dados = await r.json();
+    trechos = [...dados.trechos].sort((a, b) => b.score - a.score);
+    fonte = dados.fonte;
+    $("#aviso-exemplo").hidden = dados.aviso !== "dados de exemplo";
+    $("#meta").textContent = `Trechos: ${dados.fonte}, gerado em ${new Date(dados.gerado_em).toLocaleString("pt-BR")}.`;
+  } catch (err) {
+    $("#meta").textContent = `Erro ao carregar /trechos (${err.message}). A API está rodando?`;
+  }
+  try {
+    const r = await fetch("detalhe.json");
+    if (r.ok) detalhe = await r.json();
+    if (detalhe.fonte !== fonte)
+      detalhe = { trechos: {} };  // detalhe de outra configuração: não misturar
+  } catch { /* painel funciona sem detalhe */ }
+  $("#k-trechos").textContent = trechos.length;
+  renderMapa();
+  if (trechos.length) mapa.fitBounds(limites(), { padding: [30, 30] });
+  rota();
+})();
+</script>
+</body>
+</html>
