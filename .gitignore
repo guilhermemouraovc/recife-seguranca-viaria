@@ -3,6 +3,8 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+data/adhoc/*
+!data/adhoc/.gitkeep
 
 # Python
 __pycache__/
@@ -14,17 +16,9 @@ __pycache__/
 .env
 secrets.h
 
-# Configuração local de agentes de IA (não sobe no commit)
-CLAUDE.md
-.claude/
+# Ferramenta local de agente (as pastas de agentes do Projeto 6 são versionadas)
 .serena/
-.agents/
-.codex/
-.cursor/
-.goose/
-.grok/
-.kimi-code/
-.omp/
+.claude/settings.local.json
 
 # Embarcado (PlatformIO) e editor
 .pio/

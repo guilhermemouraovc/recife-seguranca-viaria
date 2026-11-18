@@ -1,0 +1,50 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "bash": "python3 .github/brief-spec/brief-spec.pyz hook --provider copilot --event PostToolUse --output-profile vscode",
+        "cwd": ".",
+        "powershell": "& 'python' '.github/brief-spec/brief-spec.pyz' hook --provider copilot --event PostToolUse --output-profile 'vscode'",
+        "timeoutSec": 10,
+        "type": "command"
+      }
+    ],
+    "PreCompact": [
+      {
+        "bash": "python3 .github/brief-spec/brief-spec.pyz hook --provider copilot --event PreCompact --output-profile vscode",
+        "cwd": ".",
+        "powershell": "& 'python' '.github/brief-spec/brief-spec.pyz' hook --provider copilot --event PreCompact --output-profile 'vscode'",
+        "timeoutSec": 10,
+        "type": "command"
+      }
+    ],
+    "SessionStart": [
+      {
+        "bash": "python3 .github/brief-spec/brief-spec.pyz hook --provider copilot --event SessionStart --output-profile vscode",
+        "cwd": ".",
+        "powershell": "& 'python' '.github/brief-spec/brief-spec.pyz' hook --provider copilot --event SessionStart --output-profile 'vscode'",
+        "timeoutSec": 10,
+        "type": "command"
+      }
+    ],
+    "Stop": [
+      {
+        "bash": "python3 .github/brief-spec/brief-spec.pyz hook --provider copilot --event Stop --output-profile vscode",
+        "cwd": ".",
+        "powershell": "& 'python' '.github/brief-spec/brief-spec.pyz' hook --provider copilot --event Stop --output-profile 'vscode'",
+        "timeoutSec": 10,
+        "type": "command"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "bash": "python3 .github/brief-spec/brief-spec.pyz hook --provider copilot --event UserPromptSubmit --output-profile vscode",
+        "cwd": ".",
+        "powershell": "& 'python' '.github/brief-spec/brief-spec.pyz' hook --provider copilot --event UserPromptSubmit --output-profile 'vscode'",
+        "timeoutSec": 10,
+        "type": "command"
+      }
+    ]
+  },
+  "version": 1
+}

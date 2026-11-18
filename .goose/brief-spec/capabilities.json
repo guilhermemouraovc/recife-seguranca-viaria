@@ -1,0 +1,8 @@
+{
+  "brief_spec_version": "0.5.0",
+  "harness": "goose",
+  "kind": "brief-spec-harness-capabilities",
+  "lifecycle_automation": false,
+  "schema_version": 1,
+  "scope": "project"
+}
