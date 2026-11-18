@@ -84,7 +84,7 @@ local_id × trimestre
 
 **`trimestre`**: derivado de `data`, no formato `2024Q1`.
 
-**Grade**: só locais com **≥ 3 acidentes na série inteira**. Locais com um ou dois registros são ruído e inflam a classe negativa. Reporte na EDA quantos locais sobram e qual o balanceamento resultante; o limiar pode mudar com evidência.
+**Grade**: só locais com **≥ 3 acidentes até o fim do treino (2022Q4)** (seção 17.7). Locais com um ou dois registros são ruído e inflam a classe negativa. Reporte na EDA quantos locais sobram e qual o balanceamento resultante; o limiar pode mudar com evidência.
 
 ### 3.2 Alvo e recorte temporal
 
@@ -103,7 +103,7 @@ Acidente com vítima = `vitimas > 0` ou `vitimasfatais > 0`.
 
 - **Linhas de treino, validação e teste: só de 2021Q1 em diante.** 2015–2020 entra **apenas** como histórico das features (o corte saiu de 2020Q1 para 2021Q1 pela EDA; ver seção 17.1).
 - Features de histórico em **duas formas**: contagem absoluta e **participação relativa** (a fração dos acidentes da cidade naquele trimestre que caiu naquele local). A relativa é imune à mudança de patamar do registro.
-- Incluir `ano` como feature e um booleano `periodo_pandemia` para 2020–2021.
+- `ano` e `periodo_pandemia` (2020–2021) são calculados, mas ficam fora do modelo (seção 17.8).
 - A EDA traz o gráfico da proporção por ano e por trimestre e justifica o corte (`notebooks/01_eda_bootstrap.ipynb`).
 
 Janelas resultantes na seção 4.
@@ -135,7 +135,7 @@ Todas calculadas **apenas com dados até o trimestre da linha**. O alvo é o tri
 
 **Bairro**: nº de acidentes do bairro no trimestre anterior; o bairro como categórica.
 
-**Temporal**: número do trimestre no ano (1 a 4), `ano`, `periodo_pandemia`.
+**Temporal**: número do trimestre no ano (1 a 4). `ano` e `periodo_pandemia` ficam na tabela, fora do modelo (seção 17.8).
 
 **Telemetria** (quando houver dados do ESP32, agregados por local × trimestre): velocidade média, velocidade máxima, nº de passagens, nº de frenagens bruscas. Nulo nos períodos sem telemetria. As colunas `tel_*` são calculadas, mas ficam fora do modelo nesta fase (seção 17.4).
 
@@ -183,7 +183,7 @@ Visualizações obrigatórias: matriz de confusão por modelo, curva precisão-r
 
 ## 6. Modelos
 
-**Baseline**: `LogisticRegression(class_weight='balanced', max_iter=1000)` — interpretável, dá coeficientes, serve de piso.
+**Baseline**: `LogisticRegression(class_weight='balanced', max_iter=1000)` — interpretável, dá coeficientes, serve de piso. Ao lado dele, o baseline ingênuo de recorrência, sem treino (seção 17.9).
 
 **Comparação**, os cinco do scikit-learn: `KNeighborsClassifier`, `DecisionTreeClassifier`, `RandomForestClassifier`, `AdaBoostClassifier`, `MLPClassifier`.
 
@@ -199,7 +199,7 @@ Servidor próprio, backend no PostgreSQL, artefatos em volume local.
 
 Três experimentos, com estes nomes exatos:
 
-1. `01_baseline` — só a Regressão Logística
+1. `01_baseline` — a Regressão Logística e o baseline ingênuo de recorrência
 2. `02_comparacao_modelos` — os cinco modelos, um run cada
 3. `03_otimizacao_hiperparametros` — um run por trial do Optuna
 
@@ -471,3 +471,15 @@ Optuna (TPE, semente fixa) com **10 trials** por modelo, nos 2 melhores da compa
 ### 17.6 Indicadores do Projeto 6 e a rota `/indicadores`
 
 A aba 1 do dashboard pede indicadores do Projeto 6. A `dag_ingestao_preparo` grava a tabela `indicadores_ano` (volume, acidentes com vítima, atropelamentos com vítima e usuários vulneráveis envolvidos, por ano), e a API expõe essa tabela em `GET /indicadores`, uma rota a mais em relação à seção 10.
+
+### 17.7 Grade definida só com dados até o fim do treino
+
+A grade conta os acidentes de cada local só até 2022Q4, o último trimestre de treino (`FIM_GRADE` em `src/preparo/features.py`, ligado a `PERIODOS` de `src/modelagem/validacao.py`). Contar a série inteira, até 2024, seria olhar o futuro: um local sem histórico até 2022, mas com três acidentes em 2023–2024, entraria nas linhas de treino de 2021 justamente porque o futuro dele tem acidentes. Os locais que só passam de 3 acidentes depois de 2022 ficam fora da grade até o período de treino andar.
+
+### 17.8 `ano` e `periodo_pandemia` fora do modelo
+
+No treino (2021Q1–2022Q4), `ano` só separa 2021 de 2022, e `periodo_pandemia` é verdadeiro exatamente em 2021: os dois carregam a mesma informação. Na validação (2023) e no teste (2024), `ano` traz valores que o treino nunca viu (a Regressão Logística extrapola, as árvores tratam tudo como 2022), e `periodo_pandemia` é sempre falso. As duas colunas continuam na tabela `features`, mas `colunas_do_modelo` as deixa de fora. A mudança de patamar entre anos fica com as features de participação relativa.
+
+### 17.9 Baseline ingênuo de recorrência
+
+A CTTU disse na entrevista que o principal sinal de risco de um local é a recorrência de sinistros. O baseline ingênuo ranqueia os locais por acidentes com vítima nos últimos 4 trimestres (o total de acidentes desempata), sem treinar nada. Ele roda no experimento `01_baseline` com as mesmas métricas, os mesmos folds temporais e a mesma validação de 2023, entra no gráfico de comparação e é medido no teste de 2024 no run do campeão (`heuristica_test_*` e `ganho_test_pr_auc_sobre_heuristica`). Um modelo que não supera esse ranking não acrescenta nada ao que a CTTU já faz. Ele fica fora do ranking dos 2 melhores, porque não tem hiperparâmetro para otimizar.

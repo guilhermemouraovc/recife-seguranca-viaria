@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from src.modelagem.validacao import PERIODOS
 from src.preparo.local_id import normalizar_logradouro, normalizar_texto
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,6 +26,9 @@ POSITIVOS = ROOT / "data" / "processed" / "positivos_por_trimestre.csv"
 ALVOS = ["y_vitima", "y_atropelamento"]
 
 MINIMO_ACIDENTES_GRADE = 3
+# A grade conta só acidentes até o fim do treino: contar a série inteira poria no treino locais
+# escolhidos por acidentes de 2023-2024 (ARCHITECTURE.md, seção 17.7).
+FIM_GRADE = PERIODOS["treino"][1]
 JANELAS = (1, 2, 4)
 PERIODOS = {"madrugada": (0, 5), "manha": (6, 11), "tarde": (12, 17), "noite": (18, 23)}
 ENVOLVIDOS = ["auto", "moto", "ciclom", "ciclista", "pedestre", "onibus", "caminhao"]
@@ -37,8 +41,13 @@ MODAS = {"tempo_clima": "tempo_clima_mais_frequente",
          "gravidade": "natureza_acidente_mais_frequente"}
 
 
-def selecionar_grade(acidentes: pd.DataFrame, minimo: int = MINIMO_ACIDENTES_GRADE) -> list[str]:
-    """Locais com pelo menos `minimo` acidentes na série inteira (seção 3.1)."""
+def selecionar_grade(acidentes: pd.DataFrame, minimo: int = MINIMO_ACIDENTES_GRADE,
+                     ate: str | None = FIM_GRADE) -> list[str]:
+    """Locais com pelo menos `minimo` acidentes até o trimestre `ate`, inclusive (seção 3.1).
+    `ate=None` conta a série inteira."""
+    if ate is not None:
+        tri = pd.PeriodIndex(acidentes["trimestre"], freq="Q")
+        acidentes = acidentes[tri <= pd.Period(ate, freq="Q")]
     n = acidentes["local_id"].value_counts()
     return sorted(n[n >= minimo].index)
 
@@ -196,7 +205,7 @@ def executar() -> pd.DataFrame:
     features.to_sql("features", banco, if_exists="replace", index=False, chunksize=10_000)
     positivos = positivos_por_trimestre(features)
     positivos.to_csv(POSITIVOS, index=False)
-    print(f"grade: {len(locais)} locais com >= {MINIMO_ACIDENTES_GRADE} acidentes")
+    print(f"grade: {len(locais)} locais com >= {MINIMO_ACIDENTES_GRADE} acidentes até {FIM_GRADE}")
     print(f"features: {len(features)} linhas x {features.shape[1]} colunas, "
           f"{features['trimestre'].min()} a {features['trimestre'].max()}")
     print(positivos[positivos["trimestre"] >= "2021Q1"].round(3).to_string(index=False))

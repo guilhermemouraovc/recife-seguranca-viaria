@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.preparo.features import ALVOS, ENVOLVIDOS, MODAS, VIA_CATEGORICAS, montar_features
+from src.preparo.features import ALVOS, ENVOLVIDOS, MODAS, VIA_CATEGORICAS, montar_features, selecionar_grade
 
 COLUNAS = ["local_id", "bairro_norm", "data", "hora", "com_vitima", "fatal", "endereco_cruzamento",
            "num_semaforo", "velocidade_max_via", *ENVOLVIDOS, *VIA_CATEGORICAS, *MODAS]
@@ -69,3 +69,12 @@ def test_alvos_janelas_e_participacao():
     assert f.loc["a", "trimestres_desde_acidente_vitima"].tolist() == [0, 1, 2]
     assert pd.isna(f.loc[("b", "2019Q1"), "trimestres_desde_acidente_vitima"])
     assert f.loc["a", "acidentes_bairro_1t"].tolist() == [1, 1, 2]
+
+
+def test_grade_nao_usa_acidentes_depois_do_treino():
+    """Um local que só passa a ter acidentes depois do fim do treino não entra na grade."""
+    acidentes = _tabela(
+        [{"local_id": "antigo", "bairro_norm": "PINA", "data": f"2022-0{m}-01"} for m in (1, 4, 7)]
+        + [{"local_id": "novo", "bairro_norm": "PINA", "data": f"2023-0{m}-01"} for m in (1, 4, 7)])
+    assert selecionar_grade(acidentes, minimo=3, ate="2022Q4") == ["antigo"]
+    assert selecionar_grade(acidentes, minimo=3, ate=None) == ["antigo", "novo"]

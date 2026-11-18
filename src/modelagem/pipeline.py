@@ -19,6 +19,9 @@ from src.preparo.features import ALVOS, MODAS, VIA_CATEGORICAS
 
 SEMENTE = 42
 IDENTIFICADORES = ["local_id", "trimestre"]
+# Ficam na tabela features, mas fora do modelo (ARCHITECTURE.md, seção 17.8): no treino (2021-2022)
+# os dois só separam 2021 de 2022, e validação e teste trazem anos que o treino nunca viu.
+FORA_DO_MODELO = ["ano", "periodo_pandemia"]
 CATEGORICAS = VIA_CATEGORICAS + list(MODAS.values())
 BAIRRO = "bairro"
 # max_categories junta as categorias raras numa coluna "infrequente": no bairro, 20 + OUTROS;
@@ -28,8 +31,9 @@ MAX_CATEGORIAS, MAX_BAIRROS = 15, 21
 
 def colunas_do_modelo(features: pd.DataFrame) -> tuple[list[str], list[str]]:
     """(numéricas, categóricas) que entram no modelo. Telemetria (tel_*) fica de fora nesta
-    fase: não cobre nenhum trimestre de treino (ARCHITECTURE.md, seção 17.4)."""
-    fora = set(IDENTIFICADORES) | set(ALVOS) | set(CATEGORICAS) | {BAIRRO}
+    fase: não cobre nenhum trimestre de treino (ARCHITECTURE.md, seção 17.4). ano e
+    periodo_pandemia também (seção 17.8)."""
+    fora = set(IDENTIFICADORES) | set(ALVOS) | set(CATEGORICAS) | {BAIRRO} | set(FORA_DO_MODELO)
     numericas = [c for c in features if c not in fora and not c.startswith("tel_")]
     return numericas, [c for c in CATEGORICAS if c in features]
 

@@ -2,7 +2,7 @@
 
 O painel tem o mesmo local em vários trimestres, então k-fold estratificado põe trimestres
 futuros no treino e passados na validação. TimeSeriesSplit também não serve: ele corta por
-posição de linha, e cada trimestre tem 1.807 linhas. Aqui os folds andam sobre os trimestres
+posição de linha, e cada trimestre tem 1.673 linhas. Aqui os folds andam sobre os trimestres
 distintos, em janela crescente. tests/test_validacao.py garante que, em todo fold, o treino
 termina antes de a validação começar.
 """

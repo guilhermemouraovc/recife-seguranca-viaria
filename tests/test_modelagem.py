@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from src.modelagem import metricas
-from src.modelagem.pipeline import matriz, montar_pipeline
+from src.modelagem.pipeline import colunas_do_modelo, matriz, montar_pipeline
 
 
 def _features(n: int = 400, seed: int = 0) -> pd.DataFrame:
@@ -51,3 +51,17 @@ def test_recall_e_precisao_no_topo_por_trimestre():
     assert metricas.no_topo(y, score, tri, k=1) == (0.5, 1.0)
     limiar = metricas.escolher_limiar(y, score)
     assert metricas.avaliar(y, score, tri, limiar)["f1"] >= 0.5
+
+
+def test_ano_pandemia_e_telemetria_fora_do_modelo():
+    feats = _features().assign(ano=2021, periodo_pandemia=True, tel_passagens=1.0)
+    numericas, _ = colunas_do_modelo(feats)
+    assert not {"ano", "periodo_pandemia", "tel_passagens"} & set(numericas)
+    assert "acidentes_4t" in numericas
+
+
+def test_heuristica_ordena_por_vitimas_recentes_e_desempata_pelo_total():
+    from src.modelagem.treino import score_heuristica
+
+    parte = pd.DataFrame({"acidentes_vitima_4t": [2, 2, 5, 0], "acidentes_4t": [3, 9, 5, 40]})
+    assert score_heuristica(parte).rank(ascending=False).tolist() == [3, 2, 1, 4]

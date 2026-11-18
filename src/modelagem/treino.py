@@ -18,6 +18,7 @@ import pandas as pd
 from mlflow.tracking import MlflowClient
 from scipy.stats import loguniform, randint
 from sklearn.base import clone
+from sklearn.metrics import average_precision_score
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, cross_validate
 
 from src.modelagem import metricas
@@ -30,6 +31,10 @@ ESTADO = ROOT / "data" / "processed" / "modelagem"
 EXPERIMENTOS = {"baseline": "01_baseline", "comparacao": "02_comparacao_modelos",
                 "otimizacao": "03_otimizacao_hiperparametros"}
 BASELINE = "regressao_logistica"
+# Baseline ingênuo (ARCHITECTURE.md, seção 17.9): ranquear pela recorrência recente, a heurística
+# que a CTTU descreveu. Acidentes com vítima nos últimos 4 trimestres; o total de acidentes no
+# mesmo período desempata (Recall@k depende da ordem entre empatados).
+HEURISTICA = "heuristica_recorrencia"
 COMPARADOS = ["knn", "arvore_decisao", "random_forest", "adaboost", "mlp"]
 # Orçamento de busca (ARCHITECTURE.md, seção 17.5): 10 trials do Optuna por modelo; o RandomizedSearchCV
 # é só a referência, com 5 sorteios.
@@ -138,12 +143,37 @@ def _rodar(nome_run: str, alvo: str, pipe, partes: dict, params: dict, extras: d
     return run.info.run_id, m
 
 
+def score_heuristica(parte: pd.DataFrame) -> pd.Series:
+    """Score do baseline ingênuo: não aprende nada, só ordena pelo histórico recente do local."""
+    return (parte["acidentes_vitima_4t"] + parte["acidentes_4t"] / 1000).astype("float64")
+
+
+def _heuristica(alvo: str, partes: dict, folds: list) -> tuple[str, dict]:
+    """Run do baseline ingênuo no experimento 01: mesmas métricas, folds e validação dos modelos."""
+    treino, val = partes["treino"], partes["validacao"]
+    ytr, yv = treino[alvo].astype(int), val[alvo].astype(int)
+    score_tr, score_v = score_heuristica(treino), score_heuristica(val).to_numpy()
+    aps = pd.Series([average_precision_score(ytr.iloc[v], score_tr.iloc[v]) for _, v in folds])
+    extras = {"cv_temporal_pr_auc_mean": float(aps.mean()), "cv_temporal_pr_auc_std": float(aps.std(ddof=0))}
+    limiar = metricas.escolher_limiar(yv, score_v)
+    m = metricas.avaliar(yv, score_v, val["trimestre"], limiar)
+    with mlflow.start_run(run_name=HEURISTICA, tags={"alvo": alvo, "etapa": "baseline"}) as run, \
+            tempfile.TemporaryDirectory() as tmp:
+        mlflow.log_params({"score": "acidentes_vitima_4t + acidentes_4t / 1000"})
+        mlflow.log_metrics({**{f"val_{k}": v for k, v in m.items()}, **extras})
+        metricas.graficos(yv, score_v, limiar, Path(tmp), f"{HEURISTICA} | {alvo} | validação 2023")
+        (Path(tmp) / "classification_report.txt").write_text(metricas.relatorio(yv, score_v, limiar), encoding="utf-8")
+        mlflow.log_artifacts(tmp)
+    return run.info.run_id, {**m, **extras}
+
+
 def _parametros(pipe) -> dict:
     return pipe.named_steps["modelo"].get_params(deep=False)
 
 
 def treinar_baseline(features: pd.DataFrame | None = None) -> None:
-    """Experimento 01: só a Regressão Logística, o piso de comparação."""
+    """Experimento 01: a Regressão Logística e o baseline ingênuo de recorrência, os pisos de
+    comparação. O ingênuo fica fora do ranking da comparação (não tem o que otimizar)."""
     _mlflow()
     mlflow.set_experiment(EXPERIMENTOS["baseline"])
     for alvo in ALVOS:
@@ -152,9 +182,13 @@ def treinar_baseline(features: pd.DataFrame | None = None) -> None:
         pipe = montar_pipeline(feats, BASELINE)
         extras = {**_cv(pipe, Xtr, ytr, folds), **_cv_estratificado(pipe, Xtr, ytr)}
         run_id, m = _rodar(BASELINE, alvo, pipe, partes, _parametros(pipe), extras, {"etapa": "baseline"}, folds)
-        _estado(alvo, comparacao={BASELINE: {**m, **extras, "run_id": run_id}})
+        run_h, m_h = _heuristica(alvo, partes, folds)
+        _estado(alvo, comparacao={BASELINE: {**m, **extras, "run_id": run_id}},
+                heuristica={**m_h, "run_id": run_h})
         print(f"[{alvo}] baseline: CV temporal PR-AUC {extras['cv_temporal_pr_auc_mean']:.3f} "
               f"(estratificado {extras['cv_estratificado_pr_auc_mean']:.3f}), validação {m['pr_auc']:.3f}")
+        print(f"[{alvo}] {HEURISTICA}: CV temporal PR-AUC {m_h['cv_temporal_pr_auc_mean']:.3f}, "
+              f"validação {m_h['pr_auc']:.3f}")
 
 
 def comparar_modelos(features: pd.DataFrame | None = None) -> dict:
@@ -247,14 +281,19 @@ def registrar_campeao(features: pd.DataFrame | None = None) -> dict:
         score = pipe.predict_proba(Xte)[:, 1]
         m = metricas.avaliar(yte, score, partes["teste"]["trimestre"], limiar)
         titulo = f"campeão {nome} | {alvo} | teste 2024"
-        tabela = pd.DataFrame({n: r for n, r in estado["comparacao"].items()}).T
+        tabela = pd.DataFrame({**estado["comparacao"], HEURISTICA: estado["heuristica"]}).T
+        # O ingênuo também no teste de 2024, com o limiar dele escolhido na validação.
+        m_h = metricas.avaliar(yte, score_heuristica(partes["teste"]).to_numpy(), partes["teste"]["trimestre"],
+                               estado["heuristica"]["limiar"])
         with mlflow.start_run(run_name=f"campeao_{nome}", tags={"alvo": alvo, "etapa": "campeao", "modelo": nome}) as run, \
                 tempfile.TemporaryDirectory() as tmp:
             mlflow.log_params({**{k: str(v) for k, v in escolha["params"].items()}, "modelo": nome,
                                "treinado_em": "2021Q1-2023Q4", "limiar_escolhido_em": "validacao 2023"})
             mlflow.log_metrics({**{f"test_{k}": v for k, v in m.items()},
                                 **{f"val_{k}": v for k, v in escolha["validacao"].items()},
-                                "cv_temporal_pr_auc_mean": escolha["cv_temporal_pr_auc_mean"]})
+                                "cv_temporal_pr_auc_mean": escolha["cv_temporal_pr_auc_mean"],
+                                **{f"heuristica_test_{k}": m_h[k] for k in ("pr_auc", "recall_at_50", "recall_at_100")},
+                                "ganho_test_pr_auc_sobre_heuristica": m["pr_auc"] - m_h["pr_auc"]})
             metricas.graficos(yte, score, limiar, Path(tmp), titulo)
             metricas.barras_comparacao(tabela, Path(tmp) / "comparacao_modelos.png", f"{alvo}: validação 2023")
             tabela.to_csv(Path(tmp) / "comparacao_modelos.csv")
@@ -271,7 +310,8 @@ def registrar_campeao(features: pd.DataFrame | None = None) -> dict:
         _estado(alvo, campeao=registrados[alvo])
         print(f"[{alvo}] campeão {nome} -> {NOME_REGISTRO[alvo]} v{info.registered_model_version} @{ALIAS}: "
               f"teste PR-AUC {m['pr_auc']:.3f} (prevalência {m['prevalencia']:.3f}), "
-              f"recall@50 {m['recall_at_50']:.3f}, recall@100 {m['recall_at_100']:.3f}")
+              f"recall@50 {m['recall_at_50']:.3f}, recall@100 {m['recall_at_100']:.3f} | "
+              f"{HEURISTICA}: PR-AUC {m_h['pr_auc']:.3f}, recall@50 {m_h['recall_at_50']:.3f}")
     return registrados
 
 
