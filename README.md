@@ -1,202 +1,165 @@
-# Segurança viária no Recife — dados para Projeto 6
+# TODO: nome criativo da solução
 
-Ambiente de contexto e código para a etapa de **extração de dados** do projeto de segurança
-viária no Recife (Projeto 6, CESAR School). A desk research já definiu o tema e o problema
-preliminar:
+Solução de Aprendizado de Máquina (CESAR School, 2026.6) que vai prever **quais locais do
+Recife têm maior risco de acidente com vítima no próximo trimestre** e entregar esse ranking
+para a CTTU por API e dashboard. A fonte é o dataset público de acidentes de trânsito da
+Prefeitura do Recife (2015–2024). O desenho completo da solução está no
+[`ARCHITECTURE.md`](ARCHITECTURE.md), que é a fonte da verdade da trilha de AM.
 
-> Como os dados atualmente disponíveis sobre os sinistros de trânsito no Recife podem ser
-> melhor compreendidos e utilizados para identificar padrões e acompanhar a segurança viária?
+- **Site do projeto:** TODO: link do Google Sites
 
-Este repositório é **agentificado**: abra com Claude Code (ou outro agente compatível) e ele
-já entende o contexto do projeto, as regras que precisam ser seguidas e as skills prontas
-pra usar — sem precisar redescobrir nada do zero a cada conversa.
+## Integrantes
 
-## Como usar
+| Nome | GitHub |
+|---|---|
+| TODO: nome e sobrenome | TODO: @usuario |
+| TODO: nome e sobrenome | TODO: @usuario |
+| TODO: nome e sobrenome | TODO: @usuario |
 
-1. Abra o repositório com Claude Code. Ele lê `CLAUDE.md` automaticamente — as regras de lá
-   valem sempre, independente do que você pedir.
-2. Ambiente Python já está em `.venv/` (requirements em `requirements.txt`: requests,
-   pandas, pyarrow, pdfplumber). Use `.venv/bin/python`, não o Python do sistema.
-3. Pra rodar a pipeline principal:
-   - `scripts/fetch_datasets.py` — baixa os datasets do Portal de Dados Abertos (CKAN).
-   - `scripts/clean_sinistros.py` — limpa os sinistros 2015–2024 em
-     `data/processed/sinistros/` (parquet + README com as ressalvas).
-   - `scripts/geocode_sinistros.py` — adiciona lat/lon (semáforo conferido ou OpenStreetMap,
-     com `geo_precisao`/`coord_precisao`). Lento: ~1 req/s, exige `NOMINATIM_CONTACT`; o cache
-     versionado `data/geocode/cache_nominatim.csv` evita repetir consultas, e `--offline` só
-     aplica o cache. Detalhes e ressalvas: `docs/11-base-atropelamentos.md`.
-   - `scripts/load_postgis.sh` — sobe PostGIS no Docker (`compose.yml`, porta 5433), carrega
-     os sinistros com geometria + índice espacial (`sql/01_carga.sql`), calcula clusters e
-     score de risco (`sql/02_risco.sql`) e valida contra os locais de intervenção da CTTU
-     (`sql/03_validacao.sql`, `sql/locais_validacao.csv`). Consulta:
-     `docker compose exec db psql -U postgres`, ex. `SELECT * FROM risco_clusters('2023-01-01')`.
-     No fim grava `data/contrato/trechos.json` (formato de `docs/09`, `sql/04_trechos.sql`) e roda
-     `scripts/validar_trechos.py` nele. Configuração: `M4_APENAS_ATROPELAMENTOS`, `M4_EPS_M`, `M4_MIN_PTS`.
-   - `scripts/fetch_pdfs.py` + `scripts/extract_pdfs.py` — baixa e extrai os PDFs
-     institucionais (PSVR + Relatórios Anuais).
-   - `scripts/build_dashboard_data.py` / `web/` — dashboard exploratório dos dados já
-     processados.
-4. Se está usando outro agente/IDE sem suporte a skill, comece por `docs/01-visao-geral.md`
-   e siga a ordem numerada da pasta `docs/`.
+## Estado atual
 
-## Pesquisa qualitativa (semana 3–4)
+O que existe e roda hoje:
 
-O desk research foi aprovado; a etapa atual é entrevistar profissionais da Secretaria de
-Trânsito/CTTU (ver `docs/00-contexto-cesar.md`). Isso roda num harness separado, com contrato
-próprio (não confundir com as regras da extração de dados):
+- **Ingestão** (`src/ingestao/`): baixa os 10 CSVs anuais (2015–2024) do dataset
+  `acidentes-de-transito-com-e-sem-vitimas` pela API CKAN do Portal de Dados Abertos do
+  Recife. Cada download fica registrado em `data/manifest.jsonl` (SHA-256, data, origem), e
+  arquivos que não mudaram não são baixados de novo.
+- **Preparo** (`src/preparo/clean_sinistros.py`): unifica o esquema dos 10 anos
+  (`normalizar_schema`), remove duplicados exatos, padroniza tipos e texto e grava um Parquet
+  único com as ressalvas da fonte documentadas.
+- **Local e features** (`src/preparo/local_id.py`, `src/preparo/features.py`): identifica cada
+  local por bairro + logradouro normalizados (`local_id`), grava a tabela `dim_local` e monta a
+  tabela `features` (local × trimestre, com o alvo do trimestre seguinte) no Postgres e em
+  Parquet. Um teste garante que nenhuma feature usa dado do futuro.
+- **Docker**: PostgreSQL 16, broker MQTT (Mosquitto, com usuário e senha) e servidor MLflow
+  (backend no Postgres, artefatos em volume), todos com healthcheck; JupyterLab no profile
+  `dev`; e um serviço `tooling` para rodar ingestão, preparo e testes. Nada depende de Python
+  instalado no host.
 
-- `pesquisa-qualitativa/CLAUDE.md` — o que vale como evidência ali (claim ledger contestável).
-- `pesquisa-qualitativa/README.md` — fluxo completo.
-- Comandos `/pesquisar`, `/consolidar`, `/contestar`, `/fundamentar` em `.claude/commands/`.
+O que ainda não existe e entra nas próximas etapas, nesta ordem (`ARCHITECTURE.md`, seção
+16): notebooks de EDA, modelagem com MLflow, DAGs do Airflow, simulador embarcado e ingestor
+MQTT (com as features de telemetria), API FastAPI e dashboard Streamlit.
 
-## MVP: painel de risco + módulo veicular (fase atual)
+## Como executar
 
-Trilhas **Machine Learning** e **Sistemas Embarcados**. O painel mostra trechos e horários
-de maior risco para a CTTU. O módulo ESP32 + CAN + GPS alerta o motorista com som e luz
-quando ele está acima da velocidade segura num trecho de risco.
+Pré-requisito: Docker com Compose v2 (no Windows, Docker Desktop com WSL2). Não é preciso
+Python, venv nem nenhuma biblioteca no host.
 
-- `docs/09-contrato-trechos-e-telemetria.md`: formato dos trechos (ML → módulo) e da
-  telemetria MQTT (módulo → plataforma)
-- `docs/10-plano-mvp-e-materiais.md`: responsáveis, materiais e como o MVP cobre os
-  requisitos da trilha
-- `data/contrato/trechos.json`: trechos reais gerados pelo modelo (M4, configuração
-  `atrop-eps100-min5`, ver `docs/11`), com `scripts/load_postgis.sh`
-- `data/contrato/trechos_exemplo.json`: 4 trechos de exemplo (locais citados pela CTTU; valores
-  de risco fictícios). A API só usa esse arquivo se `trechos.json` não existir, e aí marca as
-  respostas com `"aviso": "dados de exemplo"`
+**1. Configure o `.env`** (uma vez):
 
 ```bash
-# validar um arquivo de trechos
-.venv/bin/python scripts/validar_trechos.py data/contrato/trechos.json
-
-# subir a API (a partir da raiz do repo)
-.venv/bin/pip install -r api/requirements.txt
-.venv/bin/uvicorn api.app.main:app --reload --host 0.0.0.0 --port 8000
-# painel: http://localhost:8000/painel/
-# documentação dos endpoints: http://localhost:8000/docs
-
-# testes da API (sem internet e sem Docker)
-.venv/bin/python -m pytest tests/test_api.py
+cp .env.example .env              # PowerShell: Copy-Item .env.example .env
 ```
 
-| Endpoint | Para quem | O que devolve |
+Troque `POSTGRES_PASSWORD`, `MQTT_PASSWORD` e `JUPYTER_TOKEN`. A senha do Postgres entra na
+URI do MLflow, então evite `@ : / ? # %` nela. No Linux, ponha em `AIRFLOW_UID` a saída de
+`id -u`, para os arquivos gravados em `data/` e `notebooks/` ficarem com o seu usuário. No
+Windows e no macOS, deixe `50000`.
+
+**2. Rode:**
+
+```bash
+docker compose up                                              # sobe postgres, mosquitto e mlflow (primeiro plano; -d para segundo plano)
+docker compose --profile dev up jupyter                        # notebooks em http://localhost:8888 (token = JUPYTER_TOKEN)
+docker compose run --rm tooling python -m src.ingestao.fetch_datasets   # baixa os 10 CSVs
+docker compose run --rm tooling python -m src.preparo.clean_sinistros   # gera o Parquet limpo
+docker compose run --rm tooling python -m src.preparo.local_id          # local_id e dim_local (Postgres + Parquet)
+docker compose run --rm tooling python -m src.preparo.features          # tabela features (Postgres + Parquet)
+docker compose run --rm tooling pytest                         # roda os testes
+docker compose down -v                                         # derruba tudo e apaga os volumes
+```
+
+Na primeira vez, o `docker compose up` e o `docker compose run` montam as imagens a partir do
+`requirements.txt`, o que leva alguns minutos; as imagens Python compartilham a camada das
+dependências, então ela é instalada uma vez só. Depois de mudar o `requirements.txt`, rode
+`docker compose build`. Mudanças em `src/`, `tests/` e `notebooks/` não exigem rebuild, porque
+entram nos containers por bind mount.
+
+O banco `mlflow` é criado só quando o volume `pgdata` nasce. Se você já tinha subido o
+Postgres antes desta versão, rode `docker compose down -v` uma vez.
+
+O `fetch_datasets` aceita `--force` para baixar de novo mesmo o que não mudou.
+
+### Serviços e portas
+
+| Serviço | Imagem | Porta no host | Papel |
+|---|---|---|---|
+| `postgres` | `postgres:16` | `5433` (`POSTGRES_PORT`) | bancos `viario` (dados da solução) e `mlflow`; volume nomeado `pgdata` |
+| `mosquitto` | `eclipse-mosquitto:2` | `1883` (`MQTT_PORT`) | broker MQTT; login com `MQTT_USER`/`MQTT_PASSWORD`, sem acesso anônimo |
+| `mlflow` | `docker/mlflow/Dockerfile` | `5000` (`MLFLOW_PORT`) | tracking server e Model Registry; artefatos no volume nomeado `mlflow_artifacts` |
+| `jupyter` | `docker/jupyter/Dockerfile` | `8888` (`JUPYTER_PORT`) | JupyterLab para `notebooks/` (profile `dev`, não sobe no `up`) |
+| `tooling` | `docker/python/Dockerfile` | nenhuma | ingestão, preparo e testes via `docker compose run --rm` (profile `tooling`, não sobe no `up`) |
+
+Dentro da rede do compose, os serviços se acham pelo nome: `postgres:5432`, `mosquitto:1883`,
+`http://mlflow:5000`. No macOS, a porta 5000 costuma estar ocupada pelo AirPlay: troque
+`MLFLOW_PORT` para `5001`.
+
+### O que cada etapa gera
+
+| Caminho | Conteúdo | Versionado |
 |---|---|---|
-| `GET /saude` | todos | `ok`, `fonte`, `gerado_em`, `total_trechos` (+ `aviso` se for exemplo) |
-| `GET /trechos` | painel | todos os trechos com nome |
-| `GET /trechos?hora=18` | painel | só os trechos de risco às 18h |
-| `GET /trechos/{id}` | painel | um trecho (ex.: `/trechos/c1`); 404 se o id não existir |
-| `GET /modulo/trechos` | ESP32 | versão compacta, sem `nome` (formato fixo, sem `aviso`) |
-| `GET /painel/` | CTTU | painel com mapa (`painel/index.html`) |
+| `data/raw/cttu/acidentes-de-transito-com-e-sem-vitimas/*.csv` | os 10 CSVs anuais, como vieram do portal | não |
+| `data/manifest.jsonl` | proveniência de cada download | sim |
+| `data/processed/sinistros/sinistros_2015_2024.parquet` | uma linha por chamado de sinistro, esquema unificado | não |
+| `data/processed/sinistros/colunas_por_ano.json` | colunas encontradas em cada CSV anual | não |
+| `data/processed/sinistros/README.md` | ressalvas da fonte, contagens por ano e duplicados removidos | não |
+| `data/processed/acidentes_local.parquet` | acidentes que contam (sem `CANCELADA`/`DUPLICIDADE`), com `local_id` e `trimestre` | não |
+| `data/processed/dim_local.parquet` e tabela `dim_local` | um local por linha: `local_id`, bairro e logradouro legíveis | não |
+| `data/processed/local_id_resumo.json` | exclusões, nº de locais e distribuição de acidentes por local | não |
+| `data/processed/features.parquet` e tabela `features` | local × trimestre (locais com ≥ 3 acidentes), features e alvo `y` | não |
 
-**Painel (M6):** um arquivo só (`painel/index.html`, Leaflet 1.9.4 + mqtt.js, sem build),
-servido pela própria API, com quatro abas:
+### Ressalvas da fonte que já estão tratadas
 
-- **Mapa de risco:** trechos numerados pela posição no ranking, círculo = `raio_m` do alerta,
-  filtro por faixa horária e ranking com atropelamentos, óbitos e score.
-- **Detalhe do trecho:** KPIs, atropelamentos por dia × faixa horária, ano a ano (com/sem
-  vítima), quem estava envolvido e o que o módulo faz no trecho (vel. segura, raio, horário).
-  Vem de `painel/detalhe.json` (`sql/05_painel.sql`, gerado pelo `load_postgis.sh`; fora do
-  contrato docs/09).
-- **Módulo veicular:** telemetria MQTT ao vivo (semáforo, velocidade, trecho, trajeto, log de
-  alertas). Lê os tópicos do docs/09 e os do sketch Wokwi do grupo (`g3/veiculo/...`). Sem
-  ESP32, rode o simulador: `.venv/bin/python scripts/simular_modulo.py [--hora 10]`.
-- **Metodologia:** score UPS, validação do docs/11 e ressalvas.
+- A coluna `timestamp` do dicionário do portal não existe nos CSVs; o nome real é `data`
+  (`DATA` em 2018–2019).
+- `hora` está vazia em todo o CSV de 2022 e não é recuperável de outra coluna.
+- `acidente_verificado` só existe de 2018 em diante. Não é usada como filtro: vira categórica
+  com `DESCONHECIDO`.
+- `endereco_cruzamento`, `numero_cruzamento` e `referencia_cruzamento` só existem de 2016 a 2019.
+- As flags `DUPLICIDADE` e `CANCELADA` continuam na coluna `situacao`.
 
-Os tiles vêm do OpenStreetMap e o broker MQTT é o público da HiveMQ, então o painel precisa de
-internet; os dados dos trechos não.
+A lista completa sai no README gerado em `data/processed/sinistros/`.
 
-![Painel M6: mapa de risco](docs/img/painel-m6.jpg)
-![Painel M6: módulo veicular com o simulador](docs/img/painel-m6-modulo.jpg)
-
-`--host 0.0.0.0` deixa a API acessível para o ESP32 na mesma rede Wi-Fi (use o IP do
-computador, ex.: `http://192.168.0.15:8000/modulo/trechos`).
-
-## Skills disponíveis
-
-- **`extract-pdf-adhoc`** — extração de PDF avulso, fora do fluxo dos PDFs institucionais.
-  Uso: peça pro agente "extrair esse PDF: `<caminho>`" (ou solte o arquivo você mesmo em
-  `data/adhoc/raw/` e peça pra rodar). A extração é 100% `pdfplumber` — texto e tabela nativos
-  do PDF, **sem IA/OCR** — o agente só cria a pasta, roda o script e reporta o resultado.
-  Saída em `data/adhoc/processed/` (git-ignorado, acumula entre usos). PDF escaneado/sem
-  camada de texto real gera aviso explícito, não é "resolvido" silenciosamente. Detalhes em
-  `.claude/skills/extract-pdf-adhoc/SKILL.md`.
-
-Se seu grupo criar novas skills de projeto, coloque em `.claude/skills/<nome>/SKILL.md` — é
-compartilhado com todo mundo que puxar o repo, não precisa reconfigurar nada.
-
-## Regras que valem pra qualquer pesquisa/contribuição neste repo
-
-Estão detalhadas em `CLAUDE.md`, mas as que mais pegam gente de surpresa:
-
-- **Dados são públicos, mas o SAMU é sensível** (sexo/idade/bairro por chamado) — nunca usar
-  pra tentar reidentificar alguém, mesmo agregando.
-- **URLs de download do CKAN expiram em ~1h** — nunca hardcodar uma URL assinada num
-  manifesto ou doc de longo prazo; sempre resolver na hora via API.
-- **Limitações conhecidas não se "corrigem" — se sinalizam.** Encoding corrompido num
-  dataset, cobertura parcial de 2015, "chamados" ≠ números dos relatórios oficiais, 2025
-  como preliminar: tudo isso é ressalva documentada (`docs/06`), não bug a esconder.
-- **Escopo essencial vs. complementar ainda está em aberto** — antes de expandir a extração
-  pra mais datasets (ver prioridades em `docs/02`), perguntar.
-- **Pesquisa externa (fora dos datasets) sempre com fonte citada e datada** — ver
-  `docs/08-fundamentacao-e-oportunidades.md` como exemplo de formato: argumento + link pra
-  cada afirmação, e deixado explícito o que é achado vs. o que ainda é hipótese pra ideação.
-- **A ideação já foi concluída** e o grupo está construindo o MVP (ver seção abaixo e
-  `docs/10-plano-mvp-e-materiais.md`). Mudanças no contrato entre as trilhas
-  (`docs/09`) precisam ser combinadas entre ML e Embarcados.
-
-## Estrutura
+## Estrutura do repositório
 
 ```
 .
-├── CLAUDE.md                              # instruções para o agente (lidas automaticamente)
-├── README.md                              # este arquivo
-├── .claude/skills/                        # skills de projeto (ex.: extract-pdf-adhoc)
-├── docs/
-│   ├── 00-contexto-cesar.md               # prazos e trilha técnica do curso
-│   ├── 01-visao-geral.md
-│   ├── 02-catalogo-de-dados.md            # todo dataset encontrado, com URLs e API
-│   ├── 03-ontologia.md                    # entidades e como (não) se relacionam
-│   ├── 04-esquemas-datasets.md            # colunas reais, já inspecionadas
-│   ├── 05-arquitetura-extracao.md         # como estruturar o pipeline
-│   ├── 06-limitacoes-metodologicas.md     # ressalvas que não podem ser perdidas
-│   ├── 07-backlog-tarefas.md              # tarefas concretas, em ordem
-│   ├── 08-fundamentacao-e-oportunidades.md # argumento do tema + pesquisa externa citada
-│   ├── 09-contrato-trechos-e-telemetria.md # interface ML ↔ módulo (HTTP e MQTT)
-│   ├── 10-plano-mvp-e-materiais.md        # responsáveis, materiais, requisitos da trilha
-│   ├── 11-base-atropelamentos.md        # base de sinistros: pipeline integrado, geocodificação e ressalvas da fonte
-│   ├── 12-criterios-cruzamento.md         # record linkage CTTU × SAMU × SDS (MVP só dado público)
-│   └── 13-velocidade-segura.md            # OMS × CTB × limite municipal (o que está e não está definido)
-├── scripts/
-│   ├── ckan_client.py / fetch_datasets.py  # pipeline dos datasets CKAN
-│   ├── clean_sinistros.py / geocode_sinistros.py # limpeza + geocodificação dos sinistros
-│   ├── load_postgis.sh                     # PostGIS + score de risco (usa sql/ e compose.yml)
-│   ├── fetch_pdfs.py / extract_pdfs.py     # pipeline dos PDFs institucionais
-│   ├── extract_adhoc.py                    # extração ad-hoc (skill extract-pdf-adhoc)
-│   ├── manifest.py                         # provenance/idempotência dos downloads
-│   ├── build_dashboard_data.py             # gera dados pro dashboard em web/
-│   └── validar_trechos.py                  # valida arquivos de trechos contra docs/09
-├── api/                                    # FastAPI do MVP (trechos para painel e módulo)
-├── painel/                                 # painel com mapa (M6), servido pela API em /painel/
-├── firmware/                               # código do ESP32 (trilha Embarcados)
-├── pesquisa-qualitativa/                   # harness da pesquisa com a Secretaria de Trânsito
-│   ├── CLAUDE.md / AGENTS.md               # contrato e papéis (scout/synthesizer/adversary/architect)
-│   ├── research/                           # 00-questions.md, claims.md, sources/, findings/
-│   ├── evals/ledger.eval.md                # portão de qualidade antes de gerar artefato
-│   └── artifacts/                          # roteiro de entrevista + mapeamento de respondentes
-├── data/
-│   ├── raw/       # (git-ignorado) downloads brutos
-│   ├── processed/ # (git-ignorado) dados tratados
-│   ├── geocode/   # cache do Nominatim (versionado; nunca repetir consulta)
-│   ├── contrato/  # arquivos no formato de docs/09 (versionados)
-│   └── adhoc/     # (git-ignorado) entrada/saída da extração ad-hoc de PDF
-└── web/           # dashboard estático (index.html + data.json)
+├── ARCHITECTURE.md          # desenho da solução de AM (fonte da verdade)
+├── docker-compose.yml       # postgres, mosquitto, mlflow, jupyter (dev) e tooling
+├── .env.example             # variáveis do compose (copie para .env)
+├── requirements.txt         # dependências Python com versões travadas (ARCHITECTURE.md, seção 14)
+├── docker/
+│   ├── python/              # Dockerfile do tooling
+│   ├── mlflow/              # Dockerfile do tracking server
+│   ├── jupyter/             # Dockerfile do JupyterLab
+│   ├── mosquitto/           # mosquitto.conf (sem acesso anônimo)
+│   └── postgres/init/       # cria o banco do MLflow na primeira subida
+├── notebooks/               # notebooks de EDA e features (etapa 4)
+├── src/
+│   ├── ingestao/            # ckan_client, manifest, fetch_datasets
+│   ├── preparo/             # clean_sinistros, local_id, features
+│   └── comum/               # conexão com o Postgres
+├── tests/                   # pytest
+├── embedded/esp32/          # README do módulo ESP32 (payload MQTT com local_id)
+├── data/                    # raw/ e processed/ fora do git; manifest.jsonl versionado
+├── legado/mvp-geocodificado/ # MVP anterior (Nominatim + PostGIS), fora da solução atual
+└── legado/projeto6/         # docs/ e pesquisa-qualitativa/ do Projeto 6
 ```
 
-## Origem da informação
+## Legado e histórico
 
-Tudo em `docs/` foi levantado consultando diretamente a API pública do Portal de Dados
-Abertos do Recife (CKAN, `dados.recife.pe.gov.br/api/3/action/...`) e o site da CTTU
-(`cttu.recife.pe.gov.br`) em 14/08/2026, mais pesquisa externa citada (14 e 18/08/2026,
-`docs/08`). Datasets são vivos — números de recursos, anos disponíveis e URLs assinadas
-mudam; trate o catálogo como um mapa de partida, não como verdade congelada, e sempre
-re-consulte a API antes de baixar (ver `docs/05`).
+O MVP anterior, baseado em geocodificação (Nominatim + PostGIS e contrato de trechos lat/lon),
+foi movido sem apagar para `legado/mvp-geocodificado/`. O README de lá explica o porquê.
+
+O material do Projeto 6 que dividia este repositório (`docs/`, `pesquisa-qualitativa/`) foi
+movido sem alteração para `legado/projeto6/`. As configurações de agentes de IA (`.github/`,
+`.agents`, `.codex`, `.cursor`, `.goose`, `.grok`, `.kimi-code`, `.omp`) foram removidas e
+seguem só no histórico do git. `CLAUDE.md` e `.claude/`
+são configuração local de quem usa o Claude Code e estão no `.gitignore`.
+
+## Origem dos dados
+
+Portal de Dados Abertos do Recife (CKAN), dataset
+[`acidentes-de-transito-com-e-sem-vitimas`](https://dados.recife.pe.gov.br/dataset/acidentes-de-transito-com-e-sem-vitimas),
+licença ODbL. São **chamados** registrados pela CTTU, que podem divergir dos números dos
+relatórios anuais oficiais. 2015 só tem dados a partir de junho.
