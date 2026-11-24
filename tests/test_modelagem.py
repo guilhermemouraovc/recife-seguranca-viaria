@@ -1,4 +1,6 @@
 """Tests for src/modelagem: the pipeline is fitted on the training rows only, and the metrics."""
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -65,3 +67,71 @@ def test_heuristica_ordena_por_vitimas_recentes_e_desempata_pelo_total():
 
     parte = pd.DataFrame({"acidentes_vitima_4t": [2, 2, 5, 0], "acidentes_4t": [3, 9, 5, 40]})
     assert score_heuristica(parte).rank(ascending=False).tolist() == [3, 2, 1, 4]
+
+
+def test_estado_grava_por_inteiro_ou_nao_grava(tmp_path, monkeypatch):
+    """O JSON só troca no os.replace: se ele falhar, o estado anterior fica intacto."""
+    from src.modelagem import treino
+
+    monkeypatch.setattr(treino, "ESTADO", tmp_path)
+    treino._estado("y_vitima", top2=["knn", "mlp"])
+    monkeypatch.setattr(treino.os, "replace", lambda *a: (_ for _ in ()).throw(OSError("disco cheio")))
+    with pytest.raises(OSError):
+        treino._estado("y_vitima", escolhido="knn")
+    assert json.loads((tmp_path / "y_vitima.json").read_text(encoding="utf-8")) == {"top2": ["knn", "mlp"]}
+
+
+def test_treinar_baseline_comeca_estado_novo(tmp_path, monkeypatch):
+    """Nada do treino anterior (top2, otimizacao, escolhido, campeao) sobrevive a um treino novo."""
+    from src.modelagem import treino
+
+    monkeypatch.setattr(treino, "ESTADO", tmp_path)
+    for alvo in treino.ALVOS:
+        treino._estado(alvo, top2=["knn", "mlp"], otimizacao={}, escolhido="knn", campeao={"versao": "3"})
+    m = {"pr_auc": .3, "cv_temporal_pr_auc_mean": .2}
+    falsos = {"_mlflow": lambda: None, "_dados": lambda alvo, f: (f, {"treino": f}, []), "_xy": lambda *a: (None, None),
+              "montar_pipeline": lambda *a: None, "_parametros": lambda pipe: {}, "_rodar": lambda *a: ("lr", m),
+              "_cv": lambda *a: {"cv_temporal_pr_auc_mean": .2}, "_heuristica": lambda *a: ("h", m),
+              "_cv_estratificado": lambda *a: {"cv_estratificado_pr_auc_mean": .4}}
+    for nome, falso in falsos.items():
+        monkeypatch.setattr(treino, nome, falso)
+    monkeypatch.setattr(treino.mlflow, "set_experiment", lambda nome: None)
+
+    treino.treinar_baseline(pd.DataFrame())
+    for alvo in treino.ALVOS:
+        assert set(treino._estado(alvo)) == {"comparacao", "heuristica"}
+
+
+def test_exportar_recusa_estado_de_treinos_misturados():
+    from src.modelagem.exportar import conferir_mesmo_treino
+
+    conferir_mesmo_treino("y_vitima", comparacao=[1, 2], optuna=[3, 4], campeao=5)  # um treino só: passa
+    with pytest.raises(RuntimeError, match="mistura treinos"):  # comparação nova, campeão do treino anterior
+        conferir_mesmo_treino("y_vitima", comparacao=[10, 11], optuna=[3, 4], campeao=5)
+    with pytest.raises(RuntimeError, match="mistura treinos"):  # Optuna do treino anterior
+        conferir_mesmo_treino("y_vitima", comparacao=[10, 11], optuna=[3, 4], campeao=12)
+
+
+def test_exportar_leva_o_baseline_para_o_campeao_csv(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from src.modelagem import exportar
+
+    metricas_campeao = {"test_pr_auc": .7, "val_pr_auc": .6, "heuristica_test_pr_auc": .65,
+                        "baseline_test_pr_auc": .68, "baseline_test_recall_at_50": .1,
+                        "ganho_test_pr_auc_sobre_baseline": .02}
+    run = lambda r: SimpleNamespace(info=SimpleNamespace(start_time={"c": 1, "h": 1, "o": 2, "x": 3}[r]),
+                                    data=SimpleNamespace(metrics=metricas_campeao if r == "x" else {}))
+    cliente = SimpleNamespace(get_run=run, list_artifacts=lambda r: [])
+    estado = {"comparacao": {"regressao_logistica": {"run_id": "c"}}, "heuristica": {"run_id": "h"},
+              "otimizacao": {"knn": {"run_id": "o", "params": {}}},
+              "campeao": {"run_id": "x", "modelo": "knn", "versao": "1"}}
+    monkeypatch.setattr(exportar, "_mlflow", lambda: None)
+    monkeypatch.setattr(exportar, "MlflowClient", lambda: cliente)
+    monkeypatch.setattr(exportar, "_estado", lambda alvo: estado)
+    monkeypatch.setattr(exportar, "SAIDA", tmp_path)
+
+    exportar.exportar()
+    colunas = set(pd.read_csv(tmp_path / "campeao.csv").columns)
+    assert {"baseline_test_pr_auc", "baseline_test_recall_at_50", "ganho_test_pr_auc_sobre_baseline"} <= colunas
+    assert "val_pr_auc" not in colunas

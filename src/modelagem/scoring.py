@@ -31,7 +31,8 @@ def modelos_campeoes() -> dict:
 
 
 def carregar_modelos(campeoes: dict) -> dict:
-    return {alvo: mlflow.sklearn.load_model(f"models:/{info['nome']}@{ALIAS}") for alvo, info in campeoes.items()}
+    # Pela versão, não pelo alias: o @champion pode mudar depois que modelos_campeoes leu versão e limiar.
+    return {alvo: mlflow.sklearn.load_model(f"models:/{info['nome']}/{info['versao']}") for alvo, info in campeoes.items()}
 
 
 def pontuar(linhas: pd.DataFrame, modelos: dict, campeoes: dict) -> pd.DataFrame:

@@ -87,14 +87,17 @@ def carregar_features() -> pd.DataFrame:
     return pd.read_sql_table("features", engine())
 
 
-def _estado(alvo: str, **novo) -> dict:
-    """Lê o estado do alvo e, se vier `novo`, grava por cima as chaves dadas."""
+def _estado(alvo: str, *, zerar: bool = False, **novo) -> dict:
+    """Lê o estado do alvo e, se vier `novo`, grava por cima as chaves dadas (com `zerar`, só elas)."""
     caminho = ESTADO / f"{alvo}.json"
-    estado = json.loads(caminho.read_text(encoding="utf-8")) if caminho.exists() else {}
+    estado = json.loads(caminho.read_text(encoding="utf-8")) if caminho.exists() and not zerar else {}
     if novo:
         ESTADO.mkdir(parents=True, exist_ok=True)
         estado.update(novo)
-        caminho.write_text(json.dumps(estado, ensure_ascii=False, indent=2), encoding="utf-8")
+        # Arquivo temporário + os.replace: quem lê ao mesmo tempo vê o JSON antigo ou o novo, nunca pela metade.
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=ESTADO, suffix=".tmp", delete=False) as tmp:
+            json.dump(estado, tmp, ensure_ascii=False, indent=2)
+        os.replace(tmp.name, caminho)
     return estado
 
 
@@ -183,7 +186,8 @@ def treinar_baseline(features: pd.DataFrame | None = None) -> None:
         extras = {**_cv(pipe, Xtr, ytr, folds), **_cv_estratificado(pipe, Xtr, ytr)}
         run_id, m = _rodar(BASELINE, alvo, pipe, partes, _parametros(pipe), extras, {"etapa": "baseline"}, folds)
         run_h, m_h = _heuristica(alvo, partes, folds)
-        _estado(alvo, comparacao={BASELINE: {**m, **extras, "run_id": run_id}},
+        # Primeira etapa do treino: estado novo, sem top2, otimizacao, escolhido e campeao do treino anterior.
+        _estado(alvo, zerar=True, comparacao={BASELINE: {**m, **extras, "run_id": run_id}},
                 heuristica={**m_h, "run_id": run_h})
         print(f"[{alvo}] baseline: CV temporal PR-AUC {extras['cv_temporal_pr_auc_mean']:.3f} "
               f"(estratificado {extras['cv_estratificado_pr_auc_mean']:.3f}), validação {m['pr_auc']:.3f}")
@@ -285,6 +289,12 @@ def registrar_campeao(features: pd.DataFrame | None = None) -> dict:
         # O ingênuo também no teste de 2024, com o limiar dele escolhido na validação.
         m_h = metricas.avaliar(yte, score_heuristica(partes["teste"]).to_numpy(), partes["teste"]["trimestre"],
                                estado["heuristica"]["limiar"])
+        # O baseline do projeto também: a Regressão Logística padrão, treinada em treino + validação como o
+        # campeão e medida no teste com o limiar dela escolhido na validação.
+        base = montar_pipeline(feats, BASELINE).fit(Xtv, ytv)
+        m_b = metricas.avaliar(yte, base.predict_proba(Xte)[:, 1], partes["teste"]["trimestre"],
+                               estado["comparacao"][BASELINE]["limiar"])
+        no_teste = ("pr_auc", "recall_at_50", "recall_at_100", "precisao_at_50", "precisao_at_100", "roc_auc")
         with mlflow.start_run(run_name=f"campeao_{nome}", tags={"alvo": alvo, "etapa": "campeao", "modelo": nome}) as run, \
                 tempfile.TemporaryDirectory() as tmp:
             mlflow.log_params({**{k: str(v) for k, v in escolha["params"].items()}, "modelo": nome,
@@ -292,8 +302,10 @@ def registrar_campeao(features: pd.DataFrame | None = None) -> dict:
             mlflow.log_metrics({**{f"test_{k}": v for k, v in m.items()},
                                 **{f"val_{k}": v for k, v in escolha["validacao"].items()},
                                 "cv_temporal_pr_auc_mean": escolha["cv_temporal_pr_auc_mean"],
-                                **{f"heuristica_test_{k}": m_h[k] for k in ("pr_auc", "recall_at_50", "recall_at_100")},
-                                "ganho_test_pr_auc_sobre_heuristica": m["pr_auc"] - m_h["pr_auc"]})
+                                **{f"heuristica_test_{k}": m_h[k] for k in no_teste if k != "roc_auc"},
+                                "ganho_test_pr_auc_sobre_heuristica": m["pr_auc"] - m_h["pr_auc"],
+                                **{f"baseline_test_{k}": m_b[k] for k in no_teste},
+                                "ganho_test_pr_auc_sobre_baseline": m["pr_auc"] - m_b["pr_auc"]})
             metricas.graficos(yte, score, limiar, Path(tmp), titulo)
             metricas.barras_comparacao(tabela, Path(tmp) / "comparacao_modelos.png", f"{alvo}: validação 2023")
             tabela.to_csv(Path(tmp) / "comparacao_modelos.csv")
@@ -311,6 +323,7 @@ def registrar_campeao(features: pd.DataFrame | None = None) -> dict:
         print(f"[{alvo}] campeão {nome} -> {NOME_REGISTRO[alvo]} v{info.registered_model_version} @{ALIAS}: "
               f"teste PR-AUC {m['pr_auc']:.3f} (prevalência {m['prevalencia']:.3f}), "
               f"recall@50 {m['recall_at_50']:.3f}, recall@100 {m['recall_at_100']:.3f} | "
+              f"{BASELINE}: PR-AUC {m_b['pr_auc']:.3f}, recall@50 {m_b['recall_at_50']:.3f} | "
               f"{HEURISTICA}: PR-AUC {m_h['pr_auc']:.3f}, recall@50 {m_h['recall_at_50']:.3f}")
     return registrados
 

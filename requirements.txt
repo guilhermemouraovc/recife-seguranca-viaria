@@ -25,6 +25,9 @@ requests==2.34.2
 Unidecode==1.4.0
 pytest==9.2.0
 jupyterlab==4.6.6
+# Fora da lista da seção 14, com justificativa: o Airflow 3 abre uma conexão assíncrona com o
+# banco de metadados, e para Postgres o driver dela é o asyncpg.
+asyncpg==0.32.0
 
 # Transitivas, travadas para a instalação ser reproduzível (pip freeze, Python 3.12, Linux).
 # Para atualizar: mude as diretas acima, instale só elas numa imagem python:3.12-slim limpa,

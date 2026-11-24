@@ -1,14 +1,19 @@
 """Ingestão e preparo, mensal (ARCHITECTURE.md, seção 9).
 
-baixar_csvs -> normalizar_schema -> limpar -> construir_local_id -> montar_features -> validar.
+baixar_csvs -> normalizar_schema -> limpar -> construir_local_id -> montar_features -> validar ->
+publicar. construir_local_id e montar_features gravam em staging; o validar testa o staging e só o
+publicar troca as tabelas e os arquivos oficiais, emitindo o asset que dispara a dag_treino.
 Cada tarefa chama a função do src/ que também roda pela linha de comando. Os imports ficam
 dentro das tarefas para o dag-processor não carregar pandas a cada leitura do arquivo.
 """
+import os
 import subprocess
 import sys
 
 import pendulum
-from airflow.sdk import dag, task
+from airflow.sdk import Asset, dag, task
+
+FEATURES = Asset("features")  # a dag_treino agenda por este mesmo nome
 
 
 @dag(dag_id="dag_ingestao_preparo", schedule="@monthly", start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
@@ -46,13 +51,23 @@ def dag_ingestao_preparo():
 
     @task
     def validar() -> None:
-        """Asserts de dados e o teste de não-vazamento; um teste que falha derruba a DAG."""
-        testes = ["tests/test_dados.py", "tests/test_features.py", "tests/test_validacao.py"]
-        r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *testes], cwd="/app")
-        if r.returncode:
-            raise RuntimeError(f"validação falhou (pytest saiu com {r.returncode})")
+        """Asserts de dados (sobre o staging) e o teste de não-vazamento; um teste que falha derruba a DAG."""
+        from src.preparo.local_id import STAGING
 
-    baixar_csvs() >> normalizar_schema() >> limpar() >> construir_local_id() >> montar_features() >> validar()
+        testes = ["tests/test_dados.py", "tests/test_features.py", "tests/test_validacao.py"]
+        r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *testes], cwd="/app",
+                           env={**os.environ, "DADOS_PROCESSADOS": str(STAGING)})
+        if r.returncode:
+            raise RuntimeError(f"validação falhou (pytest saiu com {r.returncode}); as tabelas oficiais não mudaram")
+
+    @task(outlets=[FEATURES])
+    def publicar() -> list[str]:
+        from src.preparo.publicar import publicar as publicar_
+
+        return publicar_()
+
+    (baixar_csvs() >> normalizar_schema() >> limpar() >> construir_local_id() >> montar_features() >> validar()
+     >> publicar())
 
 
 dag_ingestao_preparo()
