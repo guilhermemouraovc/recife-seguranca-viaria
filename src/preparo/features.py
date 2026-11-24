@@ -3,32 +3,29 @@
 Cada linha (local, t) usa só acidentes até o trimestre t; os dois alvos olham o trimestre t+1:
 y_vitima (acidente com vítima) e y_atropelamento (acidente com pedestre e vítima).
 tests/test_features.py tem o teste de não-vazamento que garante isso. Entrada:
-data/processed/acidentes_local.parquet (de src.preparo.local_id). Saída:
-data/processed/features.parquet, a tabela features no Postgres e
-data/processed/positivos_por_trimestre.csv (positivos de cada alvo por trimestre).
+data/processed/staging/acidentes_local.parquet (de src.preparo.local_id). Saída, em staging até o
+validar passar e src.preparo.publicar trocar pelas oficiais: features.parquet, a tabela
+features_staging no Postgres e positivos_por_trimestre.csv (positivos de cada alvo por trimestre).
 
 Os agregados por (local, trimestre) entram num painel completo (todo local da grade × todo
 trimestre da série), e as features saem só de operações que olham para trás: janela móvel,
 soma acumulada, preenchimento para a frente e moda sobre contagens acumuladas.
 """
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
-from src.modelagem.validacao import PERIODOS
-from src.preparo.local_id import normalizar_logradouro, normalizar_texto
+from src.modelagem.validacao import PERIODOS as PERIODOS_SPLIT
+from src.preparo.local_id import STAGING, normalizar_logradouro, normalizar_texto
 
-ROOT = Path(__file__).resolve().parents[2]
-ENTRADA = ROOT / "data" / "processed" / "acidentes_local.parquet"
-SAIDA = ROOT / "data" / "processed" / "features.parquet"
-POSITIVOS = ROOT / "data" / "processed" / "positivos_por_trimestre.csv"
+ENTRADA = STAGING / "acidentes_local.parquet"
+SAIDA = STAGING / "features.parquet"
+POSITIVOS = STAGING / "positivos_por_trimestre.csv"
 ALVOS = ["y_vitima", "y_atropelamento"]
 
 MINIMO_ACIDENTES_GRADE = 3
 # A grade conta só acidentes até o fim do treino: contar a série inteira poria no treino locais
 # escolhidos por acidentes de 2023-2024 (ARCHITECTURE.md, seção 17.7).
-FIM_GRADE = PERIODOS["treino"][1]
+FIM_GRADE = PERIODOS_SPLIT["treino"][1]
 JANELAS = (1, 2, 4)
 PERIODOS = {"madrugada": (0, 5), "manha": (6, 11), "tarde": (12, 17), "noite": (18, 23)}
 ENVOLVIDOS = ["auto", "moto", "ciclom", "ciclista", "pedestre", "onibus", "caminhao"]
@@ -202,7 +199,7 @@ def executar() -> pd.DataFrame:
     assert not features.duplicated(["local_id", "trimestre"]).any()
 
     features.to_parquet(SAIDA, index=False)
-    features.to_sql("features", banco, if_exists="replace", index=False, chunksize=10_000)
+    features.to_sql("features_staging", banco, if_exists="replace", index=False, chunksize=10_000)
     positivos = positivos_por_trimestre(features)
     positivos.to_csv(POSITIVOS, index=False)
     print(f"grade: {len(locais)} locais com >= {MINIMO_ACIDENTES_GRADE} acidentes até {FIM_GRADE}")

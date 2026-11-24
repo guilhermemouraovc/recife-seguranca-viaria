@@ -87,14 +87,17 @@ def carregar_features() -> pd.DataFrame:
     return pd.read_sql_table("features", engine())
 
 
-def _estado(alvo: str, **novo) -> dict:
-    """Lê o estado do alvo e, se vier `novo`, grava por cima as chaves dadas."""
+def _estado(alvo: str, *, zerar: bool = False, **novo) -> dict:
+    """Lê o estado do alvo e, se vier `novo`, grava por cima as chaves dadas (com `zerar`, só elas)."""
     caminho = ESTADO / f"{alvo}.json"
-    estado = json.loads(caminho.read_text(encoding="utf-8")) if caminho.exists() else {}
+    estado = json.loads(caminho.read_text(encoding="utf-8")) if caminho.exists() and not zerar else {}
     if novo:
         ESTADO.mkdir(parents=True, exist_ok=True)
         estado.update(novo)
-        caminho.write_text(json.dumps(estado, ensure_ascii=False, indent=2), encoding="utf-8")
+        # Arquivo temporário + os.replace: quem lê ao mesmo tempo vê o JSON antigo ou o novo, nunca pela metade.
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=ESTADO, suffix=".tmp", delete=False) as tmp:
+            json.dump(estado, tmp, ensure_ascii=False, indent=2)
+        os.replace(tmp.name, caminho)
     return estado
 
 
@@ -183,7 +186,8 @@ def treinar_baseline(features: pd.DataFrame | None = None) -> None:
         extras = {**_cv(pipe, Xtr, ytr, folds), **_cv_estratificado(pipe, Xtr, ytr)}
         run_id, m = _rodar(BASELINE, alvo, pipe, partes, _parametros(pipe), extras, {"etapa": "baseline"}, folds)
         run_h, m_h = _heuristica(alvo, partes, folds)
-        _estado(alvo, comparacao={BASELINE: {**m, **extras, "run_id": run_id}},
+        # Primeira etapa do treino: estado novo, sem top2, otimizacao, escolhido e campeao do treino anterior.
+        _estado(alvo, zerar=True, comparacao={BASELINE: {**m, **extras, "run_id": run_id}},
                 heuristica={**m_h, "run_id": run_h})
         print(f"[{alvo}] baseline: CV temporal PR-AUC {extras['cv_temporal_pr_auc_mean']:.3f} "
               f"(estratificado {extras['cv_estratificado_pr_auc_mean']:.3f}), validação {m['pr_auc']:.3f}")

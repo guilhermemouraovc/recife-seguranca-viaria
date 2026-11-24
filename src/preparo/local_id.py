@@ -1,7 +1,8 @@
 """Constrói o local_id, o trimestre e a tabela dim_local a partir dos sinistros limpos.
 
 ARCHITECTURE.md, seção 3.1. O local é só texto (bairro + logradouro normalizados), estável nos
-10 anos; hora e cruzamento não entram na chave. Saídas em data/processed/:
+10 anos; hora e cruzamento não entram na chave. Saídas em data/processed/staging/ (e tabelas
+<nome>_staging), que src.preparo.publicar só leva para data/processed/ depois do validar:
 - acidentes_local.parquet: um acidente por linha, com local_id e trimestre, já sem o que não
   conta como acidente
 - dim_local.parquet (e tabela dim_local no Postgres): chave, bairro e logradouro legíveis
@@ -18,6 +19,7 @@ from unidecode import unidecode
 ROOT = Path(__file__).resolve().parents[2]
 ENTRADA = ROOT / "data" / "processed" / "sinistros" / "sinistros_2015_2024.parquet"
 SAIDA = ROOT / "data" / "processed"
+STAGING = SAIDA / "staging"
 
 PREFIXOS = {"RUA", "R", "AV", "AVENIDA", "TRAVESSA", "TV", "ESTRADA", "ESTR", "PRACA", "PCA"}
 # Chamado cancelado e chamado repetido não são acidentes a mais: ficam no Parquet limpo, fora das contagens.
@@ -121,11 +123,12 @@ def executar() -> dict:
     info = resumo(acidentes, dim_local, exclusoes)
     assert dim_local["local_id"].is_unique
 
-    acidentes.to_parquet(SAIDA / "acidentes_local.parquet", index=False)
-    dim_local.to_parquet(SAIDA / "dim_local.parquet", index=False)
-    (SAIDA / "local_id_resumo.json").write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
-    dim_local.to_sql("dim_local", engine(), if_exists="replace", index=False)
-    indicadores_ano(acidentes).to_sql("indicadores_ano", engine(), if_exists="replace", index=False)
+    STAGING.mkdir(parents=True, exist_ok=True)
+    acidentes.to_parquet(STAGING / "acidentes_local.parquet", index=False)
+    dim_local.to_parquet(STAGING / "dim_local.parquet", index=False)
+    (STAGING / "local_id_resumo.json").write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+    dim_local.to_sql("dim_local_staging", engine(), if_exists="replace", index=False)
+    indicadores_ano(acidentes).to_sql("indicadores_ano_staging", engine(), if_exists="replace", index=False)
     print(json.dumps(info, ensure_ascii=False, indent=2))
     return info
 

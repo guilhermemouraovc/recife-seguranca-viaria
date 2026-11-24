@@ -63,8 +63,9 @@ docker compose up                                              # sobe postgres, 
 docker compose --profile dev up jupyter                        # notebooks em http://localhost:8888 (token = JUPYTER_TOKEN)
 docker compose run --rm tooling python -m src.ingestao.fetch_datasets   # baixa os 10 CSVs
 docker compose run --rm tooling python -m src.preparo.clean_sinistros   # gera o Parquet limpo
-docker compose run --rm tooling python -m src.preparo.local_id          # local_id e dim_local (Postgres + Parquet)
-docker compose run --rm tooling python -m src.preparo.features          # tabela features (Postgres + Parquet)
+docker compose run --rm tooling python -m src.preparo.local_id          # local_id e dim_local, em staging
+docker compose run --rm tooling python -m src.preparo.features          # tabela features, em staging
+docker compose run --rm tooling python -m src.preparo.publicar          # troca as tabelas e os Parquet oficiais pelo staging
 docker compose run --rm tooling pytest                         # roda os testes
 docker compose down -v                                         # derruba tudo e apaga os volumes
 ```

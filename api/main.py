@@ -1,10 +1,12 @@
 """API FastAPI da solução (ARCHITECTURE.md, seção 10). Documentação OpenAPI em /docs.
 
 Lê dim_local, features, scores e indicadores_ano do Postgres e os modelos @champion do MLflow.
-O modelo é carregado na subida; se ainda não houver campeão registrado, a API sobe mesmo assim,
-/health mostra o motivo e as rotas que precisam do modelo respondem 503 até ele existir.
+O modelo é carregado na subida e, no máximo a cada INTERVALO_S, as rotas que o usam reconferem o
+@champion no registry e recarregam se a versão mudou. Se ainda não houver campeão registrado, a API
+sobe mesmo assim, /health mostra o motivo e essas rotas respondem 503 até ele existir.
 """
 import os
+import time
 from contextlib import asynccontextmanager
 
 import pandas as pd
@@ -19,7 +21,9 @@ MLFLOW = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000")
 FEATURES_PRINCIPAIS = ["acidentes_4t", "acidentes_vitima_4t", "rel_acidentes_vitima_4t", "acidentes_fatal_4t",
                        "trimestres_desde_acidente_vitima", "trimestres_consecutivos_com_acidente",
                        "acidentes_bairro_1t", "velocidade_max_via", "media_pedestre", "media_moto"]
-estado: dict = {"campeoes": None, "modelos": None, "erro": "modelo ainda não carregado"}
+INTERVALO_S = 60  # no máximo uma consulta ao registry por minuto, mesmo com o MLflow fora
+# carregado = (campeoes, modelos), trocado de uma vez: nenhuma rota vê a versão de um e o modelo de outro.
+estado: dict = {"carregado": None, "erro": "modelo ainda não carregado", "conferido_em": float("-inf")}
 
 
 # ---------- acesso a dados (os testes substituem estas funções) ----------
@@ -45,19 +49,31 @@ def mlflow_ok() -> bool:
         return False
 
 
+def _versoes(campeoes: dict) -> dict:
+    return {alvo: info["versao"] for alvo, info in campeoes.items()}
+
+
 def carregar_modelo() -> bool:
-    """Carrega os @champion; devolve se há modelo. Chamado na subida e de novo sob demanda."""
+    """Confere o @champion no registry e carrega os modelos se a versão mudou; devolve se há modelo."""
+    estado["conferido_em"] = time.monotonic()  # antes da consulta: pedidos simultâneos não repetem a tentativa
     try:
         campeoes = scoring.modelos_campeoes()
-        estado.update(campeoes=campeoes, modelos=scoring.carregar_modelos(campeoes), erro=None)
-    except Exception as erro:  # sem campeão registrado ou MLflow fora: a API segue de pé
-        estado.update(campeoes=None, modelos=None, erro=f"{type(erro).__name__}: {erro}")
-    return estado["modelos"] is not None
+        if estado["carregado"] is None or _versoes(estado["carregado"][0]) != _versoes(campeoes):
+            estado["carregado"] = (campeoes, scoring.carregar_modelos(campeoes))
+        estado["erro"] = None
+    except Exception as erro:  # sem campeão ou MLflow fora: a API segue de pé, com o modelo que já tinha
+        estado["erro"] = f"{type(erro).__name__}: {erro}"
+    return estado["carregado"] is not None
 
 
-def _exigir_modelo() -> None:
-    if estado["modelos"] is None and not carregar_modelo():
+def _exigir_modelo() -> tuple[dict, dict]:
+    """(campeoes, modelos) em uso; reconfere o registry se já passou INTERVALO_S da última vez."""
+    if time.monotonic() - estado["conferido_em"] >= INTERVALO_S:
+        carregar_modelo()
+    carregado = estado["carregado"]
+    if carregado is None:
         raise HTTPException(503, f"nenhum modelo @champion disponível ({estado['erro']}); rode a dag_treino")
+    return carregado
 
 
 def _scores() -> pd.DataFrame:
@@ -179,7 +195,7 @@ def _local(posicao: int, linha: pd.Series) -> Local:
 @app.get("/health", response_model=Saude)
 def health() -> Saude:
     """Status da API, do banco e do MLflow (e se há modelo carregado)."""
-    tem_modelo = estado["modelos"] is not None
+    tem_modelo = estado["carregado"] is not None
     return Saude(api="ok", banco="ok" if banco_ok() else "fora", mlflow="ok" if mlflow_ok() else "fora",
                  modelo="carregado" if tem_modelo else "ausente", detalhe_modelo=None if tem_modelo else estado["erro"])
 
@@ -202,7 +218,10 @@ def detalhe_local(local_id: str) -> DetalheLocal:
     if dim.empty:
         raise HTTPException(404, f"local_id {local_id} não existe em dim_local")
     feats = consultar("SELECT * FROM features WHERE local_id = :id ORDER BY trimestre", id=local_id)
-    scores = _scores().reset_index(drop=True)
+    try:
+        scores = _scores().reset_index(drop=True)
+    except HTTPException:  # antes da primeira dag_scoring: o detalhe sai sem score
+        scores = pd.DataFrame(columns=["local_id"])
     no_ranking = scores.index[scores["local_id"] == local_id]
     score = _local(int(no_ranking[0]) + 1, scores.loc[no_ranking[0]]) if len(no_ranking) else None
     historico = [Historico(trimestre=r["trimestre"], acidentes=int(r["acidentes_1t"]),
@@ -218,7 +237,7 @@ def detalhe_local(local_id: str) -> DetalheLocal:
 @app.post("/score", response_model=RespostaScore)
 def score(pedido: PedidoScore) -> RespostaScore:
     """Inferência sob demanda: pontua um local com as features de um trimestre."""
-    _exigir_modelo()
+    campeoes, modelos = _exigir_modelo()
     if pedido.trimestre:
         linhas = consultar("SELECT * FROM features WHERE local_id = :id AND trimestre = :t",
                            id=pedido.local_id, t=pedido.trimestre)
@@ -227,7 +246,7 @@ def score(pedido: PedidoScore) -> RespostaScore:
                            id=pedido.local_id)
     if linhas.empty:
         raise HTTPException(404, "não há features para esse local (e trimestre); ele está na grade?")
-    r = scoring.pontuar(linhas, estado["modelos"], estado["campeoes"]).iloc[0]
+    r = scoring.pontuar(linhas, modelos, campeoes).iloc[0]
     return RespostaScore(local_id=r["local_id"], trimestre_base=r["trimestre_base"], trimestre_alvo=r["trimestre_alvo"],
                          score_vitima=float(r["score_vitima"]),
                          score_atropelamento=float(r["score_atropelamento"]) if "score_atropelamento" in r else None,
@@ -239,19 +258,19 @@ def metricas() -> list[Metricas]:
     """Métricas dos modelos em produção (teste 2024 e validação 2023), lidas do MLflow."""
     from mlflow.tracking import MlflowClient
 
-    _exigir_modelo()
+    campeoes, _ = _exigir_modelo()
     cliente = MlflowClient()
     return [Metricas(alvo=alvo, nome=c["nome"], versao=str(c["versao"]), run_id=c["run_id"],
                      metricas=cliente.get_run(c["run_id"]).data.metrics)
-            for alvo, c in estado["campeoes"].items()]
+            for alvo, c in campeoes.items()]
 
 
 @app.get("/modelo", response_model=list[ModeloInfo])
 def modelo() -> list[ModeloInfo]:
     """Versão, run_id e data de treino dos modelos carregados (um por alvo)."""
-    _exigir_modelo()
+    campeoes, _ = _exigir_modelo()
     return [ModeloInfo(alvo=alvo, nome=c["nome"], versao=str(c["versao"]), run_id=c["run_id"], modelo=c["modelo"],
-                       limiar=c["limiar"], treinado_em=c["treinado_em"]) for alvo, c in estado["campeoes"].items()]
+                       limiar=c["limiar"], treinado_em=c["treinado_em"]) for alvo, c in campeoes.items()]
 
 
 @app.get("/indicadores", response_model=list[Indicador])

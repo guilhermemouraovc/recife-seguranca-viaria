@@ -15,6 +15,11 @@ x-ambiente-python: &ambiente-python
   USER: viario
   HOME: /tmp
   GIT_PYTHON_REFRESH: quiet
+  # Uma thread de BLAS por processo: o RandomForest já paraleliza (n_jobs=-1), e dois treinos
+  # simultâneos com BLAS multithread disputavam os núcleos (a CV da LR passou de 1 h).
+  OMP_NUM_THREADS: "1"
+  OPENBLAS_NUM_THREADS: "1"
+  MKL_NUM_THREADS: "1"
 
 x-ambiente-airflow: &ambiente-airflow
   <<: *ambiente-python
@@ -26,6 +31,9 @@ x-ambiente-airflow: &ambiente-airflow
   # mesmo em todos os serviços do Airflow.
   AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
   AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:?defina AIRFLOW_JWT_SECRET no .env (cp .env.example .env)}
+  # O token da tarefa vale 10 min por padrão; tarefas de treino passam de 1 h e o heartbeat caía
+  # com "Invalid auth token". 24 h cobre a dag_treino inteira.
+  AIRFLOW__EXECUTION_API__JWT_EXPIRATION_TIME: "86400"
   AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: ${AIRFLOW_ADMIN_USER:-admin}:admin
   AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/senhas.json
   AIRFLOW_ADMIN_USER: ${AIRFLOW_ADMIN_USER:-admin}
@@ -201,7 +209,11 @@ services:
       context: .
       dockerfile: docker/api/Dockerfile
     user: "${AIRFLOW_UID:-50000}:0"
-    environment: *ambiente-python
+    environment:
+      <<: *ambiente-python
+      # Com o MLflow fora, o padrão (7 tentativas, 120 s cada) prendia threads da API por minutos.
+      MLFLOW_HTTP_REQUEST_MAX_RETRIES: "1"
+      MLFLOW_HTTP_REQUEST_TIMEOUT: "10"
     ports: ["${API_PORT:-8000}:8000"]
     volumes:
       # tests/ e data/ montados para `docker compose run --rm api pytest` (seção 12).
@@ -283,6 +295,7 @@ services:
       - ./embedded:/app/embedded:ro
       - ./api:/app/api:ro
       - ./data:/app/data
+      - ./reports:/app/reports  # src/modelagem/exportar.py grava reports/resultados/
 
 volumes:
   pgdata:

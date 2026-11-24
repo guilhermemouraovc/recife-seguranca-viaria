@@ -6,7 +6,9 @@ direto do MLflow; a de saúde consulta a API do Airflow para a última execuçã
 """
 import json
 import os
+import tempfile
 from collections import deque
+from pathlib import Path
 
 import pandas as pd
 import requests
@@ -58,6 +60,7 @@ def ouvinte_mqtt() -> dict:
     return dados
 
 
+@st.cache_data(ttl=30, show_spinner=False)
 def ultimas_execucoes() -> pd.DataFrame:
     """Última execução de cada DAG pela API do Airflow 3 (token do simple auth manager)."""
     try:
@@ -73,6 +76,16 @@ def ultimas_execucoes() -> pd.DataFrame:
         return pd.DataFrame(linhas)
     except (requests.RequestException, KeyError, ValueError) as erro:
         return pd.DataFrame([{"DAG": "—", "estado": f"Airflow indisponível ({type(erro).__name__})"}])
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def artefato(run_id: str, caminho: str) -> str:
+    """Caminho local de um artefato do run; baixa uma vez, numa pasta fixa por run (o run não muda)."""
+    import mlflow
+
+    destino = Path(tempfile.gettempdir()) / "artefatos_mlflow" / run_id
+    destino.mkdir(parents=True, exist_ok=True)
+    return mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=caminho, dst_path=str(destino))
 
 
 dados_mqtt = ouvinte_mqtt()
@@ -132,8 +145,6 @@ with abas[2]:
     if metricas is None:
         st.warning("Sem modelo em produção: rode a dag_treino.")
     else:
-        import mlflow
-
         for m in metricas:
             v = m["metricas"]
             st.subheader(f"{m['alvo']} — {m['nome']} v{m['versao']}")
@@ -147,12 +158,11 @@ with abas[2]:
             for coluna, arquivo in zip(imagens, ["matriz_confusao.png", "curva_precisao_recall.png", "curva_roc.png",
                                                  "comparacao_modelos.png"]):
                 try:
-                    coluna.image(mlflow.artifacts.download_artifacts(run_id=m["run_id"], artifact_path=arquivo))
+                    coluna.image(artefato(m["run_id"], arquivo))
                 except Exception:
                     coluna.caption(f"{arquivo} indisponível")
             try:
-                comparacao = pd.read_csv(mlflow.artifacts.download_artifacts(run_id=m["run_id"],
-                                                                             artifact_path="comparacao_modelos.csv"), index_col=0)
+                comparacao = pd.read_csv(artefato(m["run_id"], "comparacao_modelos.csv"), index_col=0)
                 st.dataframe(comparacao[["pr_auc", "recall_at_50", "recall_at_100", "roc_auc", "cv_temporal_pr_auc_mean",
                                          "cv_estratificado_pr_auc_mean"]].astype(float).round(3), use_container_width=True)
                 st.caption("Validação 2023. cv_estratificado > cv_temporal mostra o vazamento temporal do k-fold no painel.")

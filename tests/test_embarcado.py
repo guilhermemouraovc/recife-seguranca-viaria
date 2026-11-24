@@ -26,7 +26,8 @@ def test_payload_do_simulador_passa_no_ingestor():
     assert validar(json.dumps(p).encode())["local_id"] == ROTA["pontos"][0]["local_id"]
 
 
-@pytest.mark.parametrize("estrago", [{"local_id": "nao-e-hash"}, {"frenagem_brusca": "sim"}, {"velocidade_kmh": -5},
+@pytest.mark.parametrize("estrago", [{"local_id": "nao-e-hash"}, {"local_id": "7c0fbb1fe74c\n"},
+                                     {"frenagem_brusca": "sim"}, {"velocidade_kmh": -5},
                                      {"timestamp": "2026-11-18T10:00:00"}, {"lat": 200}])
 def test_ingestor_recusa_payload_ruim(estrago):
     p = {**passagem(ROTA["pontos"][0], random.Random(0)), **estrago}

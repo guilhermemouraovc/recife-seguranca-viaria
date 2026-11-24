@@ -46,6 +46,12 @@ def _consultar(sql: str, **params) -> pd.DataFrame:
     return pd.DataFrame({"ok": [1]})
 
 
+@pytest.fixture(autouse=True)
+def estado_limpo(monkeypatch):
+    """Cada teste sobe a API do zero: o modelo carregado num teste não vaza para o seguinte."""
+    monkeypatch.setattr(api, "estado", {**api.estado, "carregado": None, "conferido_em": float("-inf")})
+
+
 @pytest.fixture
 def cliente(monkeypatch):
     monkeypatch.setattr(api, "consultar", _consultar)
@@ -77,6 +83,46 @@ def test_detalhe_e_404(cliente):
     assert cliente.get("/locais/zzzzzzzzzzzz").status_code == 404
 
 
+def test_detalhe_sem_tabela_scores(cliente, monkeypatch):
+    """Antes da primeira dag_scoring o detalhe sai com score nulo, não 503."""
+    def sem_scores(sql: str, **params):
+        if "FROM scores" in sql:
+            raise RuntimeError('relation "scores" does not exist')
+        return _consultar(sql, **params)
+
+    monkeypatch.setattr(api, "consultar", sem_scores)
+    r = cliente.get("/locais/aaaaaaaaaaaa")
+    assert r.status_code == 200 and r.json()["score"] is None
+    assert [h["acidentes"] for h in r.json()["historico"]] == [2, 5]
+
+
+def test_recarrega_o_modelo_quando_o_champion_muda(cliente, monkeypatch):
+    cargas = []
+    monkeypatch.setattr(scoring, "carregar_modelos", lambda c: cargas.append(c) or {"y_vitima": ModeloFalso(.2)})
+    versao = lambda: {m["alvo"]: m["versao"] for m in cliente.get("/modelo").json()}["y_vitima"]
+    novos = {alvo: {**c, "versao": str(int(c["versao"]) + 1)} for alvo, c in CAMPEOES.items()}
+    monkeypatch.setattr(scoring, "modelos_campeoes", lambda: novos)
+
+    assert versao() == "3" and not cargas  # dentro do intervalo: nem consulta o registry
+    monkeypatch.setitem(api.estado, "conferido_em", float("-inf"))  # passou o intervalo
+    assert versao() == "4" and len(cargas) == 1
+    assert cliente.post("/score", json={"local_id": "aaaaaaaaaaaa"}).json()["versao_modelo"] == "4"
+
+    monkeypatch.setitem(api.estado, "conferido_em", float("-inf"))
+    assert versao() == "4" and len(cargas) == 1  # mesma versão no registry: não baixa o modelo de novo
+
+    monkeypatch.setattr(scoring, "modelos_campeoes", lambda: (_ for _ in ()).throw(RuntimeError("mlflow fora")))
+    monkeypatch.setitem(api.estado, "conferido_em", float("-inf"))
+    assert versao() == "4"  # MLflow fora: segue com o modelo que já tinha
+
+
+def test_carregar_modelos_usa_a_versao_lida_e_nao_o_alias(monkeypatch):
+    uris = []
+    monkeypatch.setattr("mlflow.sklearn.load_model", uris.append)
+    scoring.carregar_modelos(CAMPEOES)
+    assert uris == ["models:/risco-viario/3", "models:/risco-viario-atropelamento/2"]
+
+
 def test_score_sob_demanda(cliente):
     r = cliente.post("/score", json={"local_id": "aaaaaaaaaaaa"}).json()
     assert r["trimestre_base"] == "2024Q4" and r["trimestre_alvo"] == "2025Q1"
@@ -90,9 +136,17 @@ def test_modelo_e_indicadores(cliente):
 
 
 def test_sem_modelo_a_api_sobe_e_responde_503(monkeypatch):
+    tentativas = []
+
+    def sem_registro():
+        tentativas.append(1)
+        raise RuntimeError("sem registro")
+
     monkeypatch.setattr(api, "consultar", _consultar)
     monkeypatch.setattr(api, "mlflow_ok", lambda: False)
-    monkeypatch.setattr(scoring, "modelos_campeoes", lambda: (_ for _ in ()).throw(RuntimeError("sem registro")))
+    monkeypatch.setattr(scoring, "modelos_campeoes", sem_registro)
     with TestClient(api.app) as c:
         assert c.get("/health").json()["modelo"] == "ausente"
         assert c.post("/score", json={"local_id": "aaaaaaaaaaaa"}).status_code == 503
+        assert c.get("/modelo").status_code == 503
+    assert len(tentativas) == 1  # só a da subida: dentro do intervalo o 503 sai sem chamar o MLflow

@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS telemetria (
 )"""
 INSERIR = text("INSERT INTO telemetria (device_id, local_id, lat, lon, momento, velocidade_kmh, frenagem_brusca) "
                "VALUES (:device_id, :local_id, :lat, :lon, :momento, :velocidade_kmh, :frenagem_brusca)")
-LOCAL_ID = re.compile(r"^[0-9a-f]{12}$")
+LOCAL_ID = re.compile(r"[0-9a-f]{12}")
 
 
 def validar(payload: bytes) -> dict:
@@ -43,7 +43,7 @@ def validar(payload: bytes) -> dict:
              "velocidade_kmh": float(d["velocidade_kmh"]), "frenagem_brusca": d["frenagem_brusca"]}
     except (KeyError, TypeError, ValueError) as erro:  # JSONDecodeError é ValueError
         raise ValueError(f"payload malformado: {erro}") from erro
-    if not LOCAL_ID.match(p["local_id"]):
+    if not LOCAL_ID.fullmatch(p["local_id"]):  # match com $ aceitaria um \n no fim
         raise ValueError("local_id não tem o formato de dim_local (12 hex)")
     if not isinstance(p["frenagem_brusca"], bool):
         raise ValueError("frenagem_brusca não é booleano")
