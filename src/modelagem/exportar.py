@@ -4,7 +4,8 @@ citar no relatório (ARCHITECTURE.md, seções 4 a 7).
 Os runs são os que `python -m src.modelagem.treino` (ou a dag_treino) gravou no estado
 data/processed/modelagem/<alvo>.json; métricas e parâmetros são lidos do MLflow.
 - modelos.csv: experimentos 01 e 02 (um run por modelo) e o melhor trial do Optuna no 03
-- campeao.csv: o modelo @champion de cada alvo no teste de 2024, ao lado do baseline ingênuo
+- campeao.csv: o modelo @champion de cada alvo no teste de 2024, ao lado da Regressão Logística e do
+  baseline ingênuo
 - campeao_<alvo>/: gráficos e tabelas do run do campeão (sem o modelo serializado)
 
 Linha de comando: python -m src.modelagem.exportar
@@ -54,7 +55,7 @@ def exportar() -> None:
         campeoes.append({"alvo": alvo, "modelo": campeao["modelo"],
                          "registro": f"{NOME_REGISTRO[alvo]}@{ALIAS} v{campeao['versao']}",
                          **{k: v for k, v in sorted(metricas.items())
-                            if k.startswith(("test_", "heuristica_test_", "ganho_"))}, "run_id": campeao["run_id"]})
+                            if k.startswith(("test_", "heuristica_test_", "baseline_test_", "ganho_"))}, "run_id": campeao["run_id"]})
         pasta = SAIDA / f"campeao_{alvo}"
         pasta.mkdir(exist_ok=True)
         for artefato in cliente.list_artifacts(campeao["run_id"]):

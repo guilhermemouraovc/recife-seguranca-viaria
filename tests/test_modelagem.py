@@ -110,3 +110,28 @@ def test_exportar_recusa_estado_de_treinos_misturados():
         conferir_mesmo_treino("y_vitima", comparacao=[10, 11], optuna=[3, 4], campeao=5)
     with pytest.raises(RuntimeError, match="mistura treinos"):  # Optuna do treino anterior
         conferir_mesmo_treino("y_vitima", comparacao=[10, 11], optuna=[3, 4], campeao=12)
+
+
+def test_exportar_leva_o_baseline_para_o_campeao_csv(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from src.modelagem import exportar
+
+    metricas_campeao = {"test_pr_auc": .7, "val_pr_auc": .6, "heuristica_test_pr_auc": .65,
+                        "baseline_test_pr_auc": .68, "baseline_test_recall_at_50": .1,
+                        "ganho_test_pr_auc_sobre_baseline": .02}
+    run = lambda r: SimpleNamespace(info=SimpleNamespace(start_time={"c": 1, "h": 1, "o": 2, "x": 3}[r]),
+                                    data=SimpleNamespace(metrics=metricas_campeao if r == "x" else {}))
+    cliente = SimpleNamespace(get_run=run, list_artifacts=lambda r: [])
+    estado = {"comparacao": {"regressao_logistica": {"run_id": "c"}}, "heuristica": {"run_id": "h"},
+              "otimizacao": {"knn": {"run_id": "o", "params": {}}},
+              "campeao": {"run_id": "x", "modelo": "knn", "versao": "1"}}
+    monkeypatch.setattr(exportar, "_mlflow", lambda: None)
+    monkeypatch.setattr(exportar, "MlflowClient", lambda: cliente)
+    monkeypatch.setattr(exportar, "_estado", lambda alvo: estado)
+    monkeypatch.setattr(exportar, "SAIDA", tmp_path)
+
+    exportar.exportar()
+    colunas = set(pd.read_csv(tmp_path / "campeao.csv").columns)
+    assert {"baseline_test_pr_auc", "baseline_test_recall_at_50", "ganho_test_pr_auc_sobre_baseline"} <= colunas
+    assert "val_pr_auc" not in colunas
