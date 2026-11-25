@@ -2,7 +2,7 @@
 e também à mão (ARCHITECTURE.md, seções 7 e 9).
 
 carregar_features -> split_temporal -> treinar_baseline -> comparar_modelos -> otimizar ->
-registrar_campeao. carregar_features grava um snapshot da tabela em Parquet e as demais tarefas
+registrar_campeao, que emite o asset "modelo_campeao" e dispara a dag_scoring. carregar_features grava um snapshot da tabela em Parquet e as demais tarefas
 treinam todas sobre ele, mesmo que a tabela mude no meio. Cada tarefa roda os dois alvos e grava
 o estado em data/processed/modelagem/, de onde a tarefa seguinte lê.
 """
@@ -10,6 +10,7 @@ import pendulum
 from airflow.sdk import Asset, dag, task
 
 FEATURES = Asset("features")  # emitido pela tarefa publicar da dag_ingestao_preparo
+MODELO = Asset("modelo_campeao")  # emitido ao registrar o @champion; dispara a dag_scoring
 
 
 # max_active_runs=1: dois treinos ao mesmo tempo sobrescrevem o estado e o snapshot um do outro.
@@ -61,7 +62,7 @@ def dag_treino():
 
         return otimizar_(pd.read_parquet(snapshot))
 
-    @task
+    @task(outlets=[MODELO])
     def registrar_campeao(snapshot: str) -> dict:
         import pandas as pd
 

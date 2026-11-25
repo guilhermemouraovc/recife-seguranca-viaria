@@ -25,6 +25,9 @@ x-ambiente-airflow: &ambiente-airflow
   <<: *ambiente-python
   AIRFLOW__CORE__EXECUTOR: LocalExecutor
   AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+  # Do zero, as DAGs já nascem ativas: a ingestão roda na subida, publica o asset features (que
+  # dispara a dag_treino) e o campeão registrado dispara a dag_scoring, sem clique na UI.
+  AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
   AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
   AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-viario}:${POSTGRES_PASSWORD}@postgres:5432/airflow
   # No Airflow 3 as tarefas falam com o api-server; o segredo assina os tokens delas e tem de ser o

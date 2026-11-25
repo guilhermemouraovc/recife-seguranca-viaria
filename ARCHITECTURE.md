@@ -234,7 +234,7 @@ Serviço `ingestor` com `paho-mqtt`, assinando `viario/telemetria`, gravando na 
 
 ## 9. Pipeline — Apache Airflow
 
-Exatamente **três DAGs**, Airflow 3.4.0, `LocalExecutor`, metadados no banco `airflow` do mesmo PostgreSQL. As DAGs ficam em `dags/` e chamam as funções de `src/`, que também rodam pela linha de comando.
+Exatamente **três DAGs**, Airflow 3.4.0, ativas desde a criação (`AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=false`): num `docker compose up` do zero, ingestão → treino → scoring rodam sozinhas, encadeadas por assets. `LocalExecutor`, metadados no banco `airflow` do mesmo PostgreSQL. As DAGs ficam em `dags/` e chamam as funções de `src/`, que também rodam pela linha de comando.
 
 ### `dag_ingestao_preparo` — `@monthly`
 1. `baixar_csvs` — CKAN, `data/raw/`, SHA-256 via manifesto
@@ -250,7 +250,9 @@ Roda sozinha quando a `dag_ingestao_preparo` publica features novas.
 
 `carregar_features` → `split_temporal` → `treinar_baseline` → `comparar_modelos` → `otimizar` → `registrar_campeao`
 
-### `dag_scoring` — `@weekly`
+### `dag_scoring` — `@weekly` e disparada pelo asset `modelo_campeao`
+A `registrar_campeao` da `dag_treino` emite o asset `modelo_campeao`, então o scoring roda logo depois de cada treino, além da execução semanal. Sem `@champion` registrado, `carregar_modelo` falha com uma mensagem que explica o que esperar, sem tentar de novo.
+
 `carregar_modelo` → `gerar_inferencias` → `gravar_scores` → `publicar_aviso` (MQTT)
 
 Não criar uma quarta DAG. A telemetria é serviço contínuo.

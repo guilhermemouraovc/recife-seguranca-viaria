@@ -79,14 +79,20 @@ só. Depois de mudar o `requirements.txt`, rode `docker compose build`. Mudança
 `dags/`, `api/`, `app/`, `tests/` e `notebooks/` não exigem rebuild, porque entram nos containers
 por bind mount.
 
-**3. Rode o pipeline.** As DAGs nascem pausadas. Em http://localhost:8080 (login
-`AIRFLOW_ADMIN_USER` / `AIRFLOW_ADMIN_PASSWORD`), ative as três DAGs:
+**3. Espere o pipeline.** As DAGs já nascem ativas e rodam sozinhas, nesta ordem, sem clique na
+UI do Airflow (http://localhost:8080, login `AIRFLOW_ADMIN_USER` / `AIRFLOW_ADMIN_PASSWORD`):
 
-1. `dag_ingestao_preparo` (cerca de 1 min) baixa os CSVs e publica a tabela `features`;
-2. a publicação dispara sozinha a `dag_treino` (cerca de 35 min), que treina, compara, otimiza e
-   registra o campeão no MLflow;
-3. depois do treino, acione a `dag_scoring` (botão Trigger; menos de 1 min), que grava os scores
-   que a API e o dashboard mostram.
+1. `dag_ingestao_preparo` (cerca de 1 min) roda na subida, baixa os CSVs e publica a tabela
+   `features`;
+2. a publicação dispara a `dag_treino` (cerca de 35 min), que treina, compara, otimiza e registra o
+   campeão no MLflow;
+3. o registro do campeão dispara a `dag_scoring` (menos de 1 min), que grava os scores que a API e
+   o dashboard mostram.
+
+Na subida do zero, a `dag_scoring` também tem uma execução semanal agendada que roda antes de
+existir modelo: ela falha de propósito, com a mensagem "Ainda não há modelo @champion no MLflow",
+e o scoring de verdade vem logo depois do treino. Depois disso, a ingestão roda todo mês e o
+scoring toda semana.
 
 **4. Use:**
 
