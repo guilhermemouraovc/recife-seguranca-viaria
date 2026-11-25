@@ -195,7 +195,7 @@ Visualizações obrigatórias: matriz de confusão por modelo, curva precisão-r
 
 ## 7. MLflow
 
-Servidor próprio, backend no PostgreSQL, artefatos em volume local.
+Servidor próprio (serviço `mlflow`), backend no banco `mlflow` do PostgreSQL, artefatos no volume nomeado `mlflow_artifacts`, servidos por HTTP (`--artifacts-destination`): os clientes não montam o volume.
 
 Três experimentos, com estes nomes exatos:
 
@@ -234,7 +234,7 @@ Serviço `ingestor` com `paho-mqtt`, assinando `viario/telemetria`, gravando na 
 
 ## 9. Pipeline — Apache Airflow
 
-Exatamente **três DAGs**, `LocalExecutor`, metadados no mesmo PostgreSQL.
+Exatamente **três DAGs**, Airflow 3.4.0, `LocalExecutor`, metadados no banco `airflow` do mesmo PostgreSQL. As DAGs ficam em `dags/` e chamam as funções de `src/`, que também rodam pela linha de comando.
 
 ### `dag_ingestao_preparo` — `@monthly`
 1. `baixar_csvs` — CKAN, `data/raw/`, SHA-256 via manifesto
@@ -243,8 +243,11 @@ Exatamente **três DAGs**, `LocalExecutor`, metadados no mesmo PostgreSQL.
 4. `construir_local_id` — seção 3.1, grava `dim_local`
 5. `montar_features` — seção 3.3, grava `features` no Postgres e Parquet em `data/processed/`
 6. `validar` — asserts com pytest: nº de linhas, nulos nas colunas obrigatórias, intervalo das datas, **e o teste de não-vazamento**. Falha a DAG se não passar
+7. `publicar` — `construir_local_id` e `montar_features` gravam em staging; só depois do `validar` o `publicar` troca as tabelas e os Parquet oficiais, e emite o asset `features`
 
-### `dag_treino` — `@monthly` e manual
+### `dag_treino` — disparada pelo asset `features` e manual
+Roda sozinha quando a `dag_ingestao_preparo` publica features novas.
+
 `carregar_features` → `split_temporal` → `treinar_baseline` → `comparar_modelos` → `otimizar` → `registrar_campeao`
 
 ### `dag_scoring` — `@weekly`
@@ -272,7 +275,7 @@ Entrada e saída com Pydantic. O OpenAPI em `/docs` é parte da entrega.
 
 ## 11. Dashboard — Streamlit
 
-Em `app/`, consumindo a API e o MQTT. Cinco abas:
+Em `app/`, consumindo a API e o MQTT (a aba 3 lê os gráficos do MLflow e a aba 5 consulta a API do Airflow). Cinco abas:
 
 1. **Visão geral** — total de acidentes, locais monitorados, nº em risco alto, última atualização, mais indicadores do Projeto 6
 2. **Locais prioritários** — tabela por score, filtro por bairro, detalhe do local
@@ -292,18 +295,22 @@ Em `app/`, consumindo a API e o MQTT. Cinco abas:
 |---|---|---|
 | `postgres` | `postgres:16` | dados + metadados do Airflow + backend do MLflow |
 | `mosquitto` | `eclipse-mosquitto:2` | broker MQTT |
-| `mlflow` | build próprio | tracking server |
-| `airflow-init` | `apache/airflow:2.9` | migração e usuário inicial |
-| `airflow-webserver` | `apache/airflow:2.9` | UI |
-| `airflow-scheduler` | `apache/airflow:2.9` | execução das DAGs |
+| `mlflow` | build próprio | tracking server e Model Registry |
+| `airflow-init` | build próprio, Airflow 3.4.0 | `airflow db migrate` e termina |
+| `airflow-api-server` | build próprio, Airflow 3.4.0 | UI e API (substitui o webserver do Airflow 2); login pelo simple auth manager, com usuário e senha do `.env` |
+| `airflow-scheduler` | build próprio, Airflow 3.4.0 | agenda e executa as tarefas (`LocalExecutor`) |
+| `airflow-dag-processor` | build próprio, Airflow 3.4.0 | lê e serializa os arquivos de `dags/` (no Airflow 3 é um serviço à parte) |
 | `api` | build próprio | FastAPI |
 | `dashboard` | build próprio | Streamlit |
 | `ingestor` | build próprio | subscriber MQTT |
 | `simulador` | build próprio | sistema embarcado simulado |
 | `jupyter` | build próprio, profile `dev` | execução dos notebooks |
+| `tooling` | build próprio, profile `tooling` | pipeline à mão e testes, via `docker compose run --rm` |
+
+"Build próprio" é um Dockerfile em `docker/<serviço>/`, todos a partir de `python:3.12-slim` com o mesmo `requirements.txt`. O Airflow não usa a imagem `apache/airflow`: é instalado pelo `requirements.txt`, para as DAGs treinarem com exatamente o mesmo scikit-learn e pandas que a API e o dashboard usam para carregar o modelo.
 
 Requisitos:
-- `healthcheck` em postgres, mosquitto, mlflow e api
+- `healthcheck` em postgres, mosquitto, mlflow, api, airflow-api-server, airflow-scheduler e airflow-dag-processor
 - `depends_on` com `condition: service_healthy`
 - volumes nomeados para dados do Postgres e artefatos do MLflow
 - credenciais e portas em `.env`, com `.env.example` versionado
@@ -312,9 +319,9 @@ Requisitos:
 Comandos que o README tem que trazer, e que precisam funcionar:
 
 ```
-docker compose up                              # sobe a solução
+docker compose up -d                           # sobe a solução
 docker compose --profile dev up jupyter        # notebooks
-docker compose run --rm api pytest             # testes
+docker compose run --rm tooling pytest         # testes
 docker compose down -v                         # derruba e limpa
 ```
 
@@ -328,7 +335,8 @@ Pastas da trilha de AM:
 ├── data/raw/ data/processed/   # gitignored
 ├── notebooks/
 │   ├── 01_eda_bootstrap.ipynb
-│   └── 02_preparacao_features.ipynb
+│   ├── 02_preparacao_features.ipynb
+│   └── modelo_*.ipynb          # investigação de cada modelo
 ├── src/
 │   ├── ingestao/   preparo/   modelagem/   comum/
 ├── embedded/simulador/   embedded/esp32/
@@ -336,7 +344,7 @@ Pastas da trilha de AM:
 ├── api/
 ├── app/
 ├── tests/
-├── reports/                    # relatório em template SBC
+├── reports/                    # figuras/ e resultados/ para o relatório (template SBC)
 ├── docker/                     # Dockerfiles por serviço
 ├── legado/mvp-geocodificado/   # MVP anterior, fora da solução (15.2)
 ├── legado/projeto6/            # docs/ e pesquisa-qualitativa/ do Projeto 6 (15.1)
@@ -354,7 +362,7 @@ Pastas da trilha de AM:
 
 ### README
 
-Obrigatório: nome e sobrenome de cada integrante com `@usuario` do GitHub, nome criativo da solução, instruções detalhadas de execução, descrição breve e link do Google Sites. **Esses dados ainda não existem no repositório — deixe placeholders marcados com `TODO:` e liste-os no fim da entrega.**
+Obrigatório: nome e sobrenome de cada integrante com `@usuario` do GitHub, nome criativo da solução (**Antecipa Recife**), instruções detalhadas de execução, descrição breve e link do Google Sites. Todos já estão no README.
 
 ---
 
@@ -434,7 +442,7 @@ Base: branch `fix/ml-architecture-base`, criada a partir da `master`. Nada vem d
 3. **`src/ingestao` e `src/preparo`**: ckan_client, manifest, fetch_datasets e clean_sinistros movidos e corrigidos; `normalizar_schema`, `local_id`, `dim_local`, `features`, gravação em Postgres e Parquet, teste de não-vazamento
 4. **`notebooks/01_eda_bootstrap.ipynb`** e `02_preparacao_features.ipynb`
 5. **`src/modelagem`**: pipeline, baseline, os cinco modelos, Optuna, MLflow, Registry
-6. **`dags/`**: as três DAGs e os três serviços do Airflow no compose
+6. **`dags/`**: as três DAGs e os serviços do Airflow 3 no compose (`airflow-init`, `airflow-api-server`, `airflow-scheduler` e `airflow-dag-processor`)
 7. **`embedded/simulador`** e o serviço `ingestor`
 8. **`api/`**
 9. **`app/`**
